@@ -115,7 +115,7 @@ class UR5Env(gym.Env):
             hz: int = 10,
             fake_env=False,
             config=DefaultEnvConfig,
-            max_episode_length: int = 100,
+            max_episode_length: int = 150,
             save_video: bool = False,
             camera_mode: str = "none",  # one of (rgb, grey, depth, both(rgb depth), pointcloud, none)
     ):
@@ -462,6 +462,10 @@ class UR5Env(gym.Env):
 
         shift = self.go_to_rest()
         self.curr_path_length = 0
+        
+        if self.pose_est:
+            self.trajectory_dir = np.clip(self.goal_position - self.curr_reset_pose[:3], -0.1, 0.1)
+            self.trajectory_dir[2] = 0.
 
         obs = self._get_obs(np.zeros_like(self.last_action))
         return obs, {"reset_shift": shift}

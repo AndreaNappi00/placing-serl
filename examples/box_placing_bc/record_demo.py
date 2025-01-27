@@ -8,6 +8,7 @@ from tqdm import tqdm
 import gymnasium as gym
 from pprint import pprint
 from pynput import keyboard
+from colorama import Fore, Style
 
 from ur_env.envs.wrappers import SpacemouseIntervention, Quat2MrpWrapper
 from serl_launcher.wrappers.serl_obs_wrappers import SerlObsWrapperNoImages
@@ -86,6 +87,13 @@ if __name__ == "__main__":
             # pprint(transition)
 
             obs = next_obs
+            
+            if "forces_reached" in info:
+                forces_announced = info["forces_reached"]
+            else:
+                forces_announced = False
+            status_text = f"{Fore.GREEN if forces_announced else Fore.RED}{'True' if forces_announced else 'False'}{Style.RESET_ALL}"
+            pbar.set_description(f"Status: {status_text}")
 
             if done:
                 success_count += int(rew > 0.99)

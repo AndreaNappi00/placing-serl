@@ -80,7 +80,7 @@ def main(_):
         FLAGS.env,
         fake_env=not FLAGS.eval_checkpoint_step,
         camera_mode="none",
-        max_episode_length=150,
+        max_episode_length=300,
     )
     # env = SpacemouseIntervention(env)
     env = RelativeFrame(env)
@@ -183,6 +183,7 @@ def main(_):
 
         trajectories = []
         traj_infos = []
+        it = 0
         try:
             for episode in range(FLAGS.eval_n_trajs):
                 trajectory = []
@@ -202,7 +203,6 @@ def main(_):
                         # seed=rng,
                     )
                     # actions = actions.at[-1].set(actions[-1] * 2) # always activate suction
-                    actions = np.asarray(actions)
 
                     ensembled_action = action_ensemble.sample(actions)  # will return actions if not activated
                     next_obs, reward, done, truncated, info = env.step(ensembled_action)
@@ -214,8 +214,13 @@ def main(_):
                         masks=1.0 - done,
                         dones=done,
                     )
+                    wandb_dict = {
+                        "gripper_action": actions[-1],
+                    }
+                    wandb_logger.log(wandb_dict, step=it)
                     trajectory.append(transition)
                     obs = next_obs
+                    it += 1
 
                     if done or truncated:
                         print("Success! Reward: ", reward)
