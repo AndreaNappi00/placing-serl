@@ -3,6 +3,8 @@ from typing import Tuple
 import gymnasium as gym
 import copy
 from scipy.spatial.transform import Rotation as R
+import time
+import warnings
 
 from ur_env.envs.ur5_env import UR5Env
 from ur_env.envs.placing_env.config import UR5PlacingCornerConfig
@@ -37,6 +39,8 @@ class BoxPlacingCornerEnv(UR5Env):
             'forces': False,
         }
         self.force_cost = 0.
+        self.upper_bound = -2
+        self.lower_bound = -10
     
     def reset(self, **kwargs):
         self.last_action[:] = 0.
@@ -46,11 +50,58 @@ class BoxPlacingCornerEnv(UR5Env):
         self.force_cost = 0.
         
         return super().reset(**kwargs)
-        
-    def update_trajectory(self):
+    
+    def _update_trajectory_dir(self):
+        if self.announced_goals['forces']:
+            self.trajectory_dir = np.array([0., 0., 1.]) * 0.01 #move up
+    
+    def _update_trajectory(self):
+        self._update_trajectory_dir()
         target_pos =  self.curr_pos[:3] + self.trajectory_dir
         target_rot = self.curr_pos[3:]
         self.trajectory = np.concatenate([target_pos, target_rot])
+        
+    def step(self, action: np.ndarray) -> tuple:
+        """standard gym step function."""
+        start_time = time.time()
+        action = np.clip(action, self.action_space.low, self.action_space.high)
+        
+        # position
+        next_pos = self.curr_pos.copy()
+        next_pos[:3] = next_pos[:3] + action[:3] * self.action_scale[0]  + self.trajectory_dir * self.action_scale[0]  ### Comment this when inference
+        
+        # print("trajectory_dir: ", self.trajectory_dir)
+        # print("action: ", action[:3])
+        # action[:3] = action[:3] - self.trajectory_dir                   ### Comment this when inference
+
+        next_pos[3:] = (
+                R.from_mrp(action[3:6] * self.action_scale[1] / 4.) * R.from_quat(next_pos[3:])
+        ).as_quat()             # c * r  --> applies c after r
+
+        gripper_action = action[6] * self.action_scale[2]
+
+        safe_pos = self.clip_safety_box(next_pos)
+        self._send_pos_command(safe_pos)
+        self._send_gripper_command(gripper_action)
+
+        self.curr_path_length += 1
+
+        obs = self._get_obs(action)
+
+        reward = self.compute_reward(obs, action)
+        # print("reward: ", reward)
+        truncated = self._is_truncated()
+        reward = reward if not truncated else reward - 10.  # truncation penalty
+        # print("truncated reward: ", reward)
+        done = self.curr_path_length >= self.max_episode_length or self.reached_goal_state(obs) or truncated
+
+        dt = time.time() - start_time
+        to_sleep = max(0, (1.0 / self.hz) - dt)
+        if to_sleep == 0:
+            warnings.warn(f"environment could not be within {self.hz} Hz, took {dt:.4f}s!")
+        time.sleep(to_sleep)
+
+        return obs, reward, done, truncated, self.get_cost_infos(done)
 
     def _get_obs(self, action) -> dict:
         # get image before state observation, so they match better in time
@@ -62,13 +113,14 @@ class BoxPlacingCornerEnv(UR5Env):
         if self.pose_est:
             self._update_box_pos_estimate()
             self._update_box_orientation_estimate()
-            self.update_trajectory()
+            self._update_trajectory()
         else:
             self.box_position = np.array([0.5, 0.5, 0.5])
             self.box_orientation = np.array([0., 0., 0.])
             self.trajectory = np.array([0., 0., 0., 0., 0., 0., 0.])
             
         self._update_currpos()
+                
         state_observation = {
             "tcp_pose": self.curr_pos,
             "tcp_vel": self.curr_vel,
@@ -86,34 +138,51 @@ class BoxPlacingCornerEnv(UR5Env):
             return copy.deepcopy(dict(state=state_observation))
         
     def get_force_cost(self, obs):
-        if obs["state"]["tcp_force"][0] < -2 and obs["state"]["tcp_force"][0] > -5 \
-            and obs["state"]["tcp_force"][1] < -2 and obs["state"]["tcp_force"][1] > -5:
-            return 0
-        return 2 * np.sum(np.power(obs["state"]["tcp_force"][:2] + 3.5, 2))
+        cost = 0.
+        if self.announced_goals['forces']:
+            return self.force_cost - 1
+        if obs["state"]["gripper_state"][0] < 0.1:
+            return 0.
+        for i in range(2):
+            if obs["state"]["tcp_force"][i] > self.upper_bound and obs["state"]["tcp_force"][i] < -1:
+                cost -= 10 * np.power(obs["state"]["tcp_force"][i] + 4, 2)              # this is pretty useless
+            elif obs["state"]["tcp_force"][i] < self.lower_bound:
+                cost += 2 * np.power(obs["state"]["tcp_force"][i] + ((self.upper_bound - self.lower_bound)/2 + self.lower_bound), 2)
+        # print("force 1:", obs["state"]["tcp_force"][0], "force 2:", obs["state"]["tcp_force"][1], "cost: ", cost)
+        return cost
     
     def update_force_goal(self, obs):
-        force_goal = obs["state"]["tcp_force"][0] < -2 and obs["state"]["tcp_force"][1] < -2 \
-            and obs["state"]["tcp_force"][0] > -5 and obs["state"]["tcp_force"][1] > -5 and obs["state"]["gripper_state"][0] > 0.1
-        if (force_goal and not self.announced_goals['forces']):
+        force_goal = obs["state"]["tcp_force"][0] < self.upper_bound and obs["state"]["tcp_force"][1] < self.upper_bound \
+            and obs["state"]["tcp_force"][0] > self.lower_bound and obs["state"]["tcp_force"][1] > self.lower_bound and obs["state"]["gripper_state"][0] > 0.1
+        if any(obs["state"]["tcp_force"][i] < self.lower_bound for i in range(2)):
+            force_goal = False
+            self.announced_goals['forces'] = False
+        elif (force_goal and not self.announced_goals['forces']):
             self.announced_goals['forces'] = True
             self.force_cost = self.get_force_cost(obs)
-            # print("Force reached!")
     
     def compute_reward(self, obs, action) -> float:
         # huge action gives negative reward (like in mountain car)
-        action_cost = 15 * np.sum(np.power(action, 2))
-        action_diff_cost = 10 * np.sum(np.power(action - self.last_action, 2))      
+        
+        # print("action norm:", np.linalg.norm(action[:3]))
+        action_cost = 2 * np.sum(np.power(action, 2))
+        # print("action_cost: ", action_cost)
+        action_diff_cost = 1 * np.sum(np.power(action - self.last_action, 2))    
+        # print("action_diff_cost: ", action_diff_cost)
                   
         self.last_action[:] = action
         step_cost = 0.5
         
-        suction_reward = 3 * float(obs["state"]["gripper_state"][1] > 0.5)
+        if self.announced_goals['forces']:
+            suction_reward = 0.
+        else:
+            suction_reward = 3 * float(obs["state"]["gripper_state"][1] > 0.5)
         suction_cost = 3. * float(obs["state"]["gripper_state"][1] < -0.5)
 
         pose = obs["state"]["tcp_pose"]
         
         orientation_cost = 1. - sum(obs["state"]["tcp_pose"][3:] * self.curr_reset_pose[3:]) ** 2
-        orientation_cost = max(orientation_cost - 0.005, 0.) * 5.
+        orientation_cost = max(orientation_cost - 0.005, 0.) * 1.
         
         max_pose_diff = 0.05  # set to 5cm
         pos_diff = obs["state"]["tcp_pose"][:2] - self.goal_position[:2]
@@ -126,32 +195,30 @@ class BoxPlacingCornerEnv(UR5Env):
         # position_cost += 10. * height_diff if height_diff > max_height_diff else 0.
         
         force_cost = self.get_force_cost(obs)
-        if self.announced_goals['forces']:
-            force_cost = self.force_cost
         # print("forces: ", obs["state"]["tcp_force"])
         
         
         cost_info = dict(
             action_cost=action_cost,
             step_cost=step_cost,
-            # suction_reward=suction_reward,
-            # suction_cost=suction_cost,
+            suction_reward=suction_reward,
+            suction_cost=suction_cost,
             orientation_cost=orientation_cost,
             # position_cost=position_cost,
             action_diff_cost=action_diff_cost,
             force_cost=force_cost,
-            total_cost=-(-action_cost - step_cost \
-                - orientation_cost - position_cost - action_diff_cost - force_cost)
+            total_cost=-(-action_cost - step_cost + suction_reward - suction_cost\
+                - orientation_cost - action_diff_cost - force_cost)
         )
         for key, info in cost_info.items():
             self.cost_infos[key] = info + (0. if key not in self.cost_infos else self.cost_infos[key])
         self.cost_infos["forces_reached"] = self.announced_goals['forces']
         
         if self.reached_goal_state(obs):
-            return 100. - action_cost - orientation_cost - action_diff_cost - force_cost
+            return 100. - action_cost - orientation_cost - action_diff_cost - force_cost - suction_cost + suction_reward
         else:
-            return 0. - action_cost - orientation_cost - \
-                 - step_cost - action_diff_cost - force_cost
+            return 0. - action_cost - orientation_cost - suction_cost \
+                 - step_cost - action_diff_cost - force_cost + suction_reward
 
     def reached_goal_state(self, obs) -> bool:
         # obs[0] == gripper pressure, obs[4] == force in Z-axis
@@ -176,8 +243,8 @@ class BoxPlacingCornerEnv(UR5Env):
         
         
         if ee_box_distance_goal and not self.announced_goals['ee_box_distance']:
-            self.announced_goals['ee_box_distance'] = True
             # print("End-effector distance to box reached!")
+            self.announced_goals['ee_box_distance'] = True
             
         if box_positon_goal and not self.announced_goals['box_position']:
             # print("Box position reached!")

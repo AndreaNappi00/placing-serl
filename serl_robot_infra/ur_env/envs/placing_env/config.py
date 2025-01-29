@@ -14,8 +14,8 @@ class UR5PlacingCornerConfig(DefaultEnvConfig):
     RANDOM_ROT_RANGE = (0.0,)
     # ABS_POSE_LIMIT_HIGH = np.array([0.14, -0.4, 0.2, 3.2, 0.1, 3.2])            # TODO euler rotations suck :/
     # ABS_POSE_LIMIT_LOW = np.array([-0.3, -0.7, -0.006, 3.0, -0.1, -3.2])
-    ABS_POSE_LIMIT_HIGH = np.array([-0.3, 0.4, 0.3, 0.05, 0.05, 0.2])
-    ABS_POSE_LIMIT_LOW = np.array([-0.6, -0.2, -0.1, -0.05, -0.05, -0.2])
+    ABS_POSE_LIMIT_HIGH = np.array([-0.2, 0.2, 0.25, 0.05, 0.05, 0.2])
+    ABS_POSE_LIMIT_LOW = np.array([-0.6, -0.1, 0.1, -0.05, -0.05, -0.2])
     ACTION_SCALE = np.array([0.02, 0.05, 2.], dtype=np.float32)
 
     ROBOT_IP: str = "192.168.1.66"

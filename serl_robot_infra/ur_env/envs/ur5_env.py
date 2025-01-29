@@ -306,7 +306,7 @@ class UR5Env(gym.Env):
         self.cost_infos = {}
         return cost_infos
 
-    def step(self, action: np.ndarray) -> tuple:
+    def step(self, action: np.ndarray) -> tuple:  # overwritten by box_placing_env.py
         """standard gym step function."""
         start_time = time.time()
         action = np.clip(action, self.action_space.low, self.action_space.high)
@@ -466,8 +466,9 @@ class UR5Env(gym.Env):
         self.curr_path_length = 0
         
         if self.pose_est:
-            self.trajectory_dir = np.clip(self.goal_position - self.curr_reset_pose[:3], -0.01, 0.01)
+            self.trajectory_dir = self.goal_position - self.curr_reset_pose[:3]
             self.trajectory_dir[2] = 0.
+            self.trajectory_dir /= np.linalg.norm(self.trajectory_dir) * 2
 
         obs = self._get_obs(np.zeros_like(self.last_action))
         return obs, {"reset_shift": shift}

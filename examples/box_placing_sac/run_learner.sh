@@ -11,6 +11,6 @@ python sac_policy.py "$@" \
     --batch_size 2048 \
     --max_steps 50000 \
     --reward_scale 1 \
-    --demo_paths "demos/ur5_test_20_demos_2025-01-23_15-14-21.pkl" \
+    --demo_paths "demos/ur5_test_20_demos_2025-01-29_16-10-32.pkl" \
 #    --preload_rlds_path "/home/amdrea/Code/voxel-serl/examples/box_picking_sac/rlds" \
 #    --debug
