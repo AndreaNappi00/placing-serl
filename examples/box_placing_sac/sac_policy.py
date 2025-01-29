@@ -9,6 +9,7 @@ import tqdm
 from absl import app, flags
 from flax.training import checkpoints
 from datetime import datetime
+import os
 
 import gymnasium as gym
 from gym.wrappers.record_episode_statistics import RecordEpisodeStatistics
@@ -67,13 +68,13 @@ flags.DEFINE_boolean("learner", False, "Is this a learner or a trainer.")
 flags.DEFINE_boolean("actor", False, "Is this a learner or a trainer.")
 flags.DEFINE_string("ip", "localhost", "IP address of the learner.")
 flags.DEFINE_integer("checkpoint_period", 10000, "Period to save checkpoints.")
-flags.DEFINE_string("checkpoint_path", '/home/andrea/Code/voxel-serl/examples/robotiq_sac/checkpoints',
+flags.DEFINE_string("checkpoint_path", '/home/andrea/Code/placing-serl/examples/box_placing_sac/checkpoints',
                     "Path to save checkpoints.")
 
 flags.DEFINE_integer("eval_checkpoint_step", 0, "evaluate the policy from ckpt at this step")
 flags.DEFINE_string("eval_checkpoint_path", None, "evaluate the policy from ckpt from this path")
 
-flags.DEFINE_string("log_rlds_path", '/home/andrea/Code/voxel-serl/examples/robotiq_sac/rlds',
+flags.DEFINE_string("log_rlds_path", '/home/andrea/Code/placing-serl/examples/box_placing_sac/rlds',
                     "Path to save RLDS logs.")
 flags.DEFINE_string("preload_rlds_path", None, "Path to preload RLDS data.")
 
@@ -81,10 +82,16 @@ flags.DEFINE_boolean(
     "debug", False, "Debug mode."
 )  # debug mode will disable wandb logging
 
+flags.DEFINE_integer("pretrain_steps", 0, "Pretrain the policy with BC.")
 
 def print_green(x):
     return print("\033[92m {}\033[00m".format(x))
+def print_yellow(x):
+    return print("\033[93m {}\033[00m".format(x))
 
+devices = jax.local_devices()
+num_devices = len(devices)
+sharding = jax.sharding.PositionalSharding(devices)
 
 ##############################################################################
 
@@ -252,6 +259,50 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator, wandb_logger=N
         time.sleep(1)
     pbar.update(len(replay_buffer) - pbar.n)  # Update progress bar
     pbar.close()
+    
+    demo_iterator = replay_buffer.get_iterator(
+        sample_args={
+            "batch_size": FLAGS.batch_size,
+            "pack_obs_and_next_obs": True,
+        },
+        device=sharding.replicate(),
+    )
+    
+    # Pretrain BC policy to get started
+    update_step = 0
+    if FLAGS.pretrain_steps:
+        if os.path.isdir(
+            os.path.join(
+                FLAGS.checkpoint_path, f"checkpoint_{FLAGS.pretrain_steps}"
+            )
+        ):
+            print_green(
+                f"BC checkpoint at {FLAGS.pretrain_steps} steps found, restoring BC checkpoint"
+            )
+            ckpt = checkpoints.restore_checkpoint(
+                os.path.abspath(FLAGS.checkpoint_path), agent.state, step=FLAGS.pretrain_steps
+            )
+            agent = agent.replace(state=ckpt)
+            update_step = FLAGS.pretrain_steps
+        else:
+            update_step = 0
+            print_yellow(
+                f"No BC checkpoint at {FLAGS.pretrain_steps} steps found, starting from scratch"
+            )
+            for step in tqdm.tqdm(
+                range(FLAGS.pretrain_steps),
+                dynamic_ncols=True,
+                desc="bc_pretraining",
+            ):
+                update_step += 1
+                batch = next(demo_iterator)
+                agent, bc_update_info = agent.update(batch)
+                if update_step % FLAGS.log_period == 0 and wandb_logger:
+                    wandb_logger.log({"bc": bc_update_info}, step=update_step)
+            checkpoints.save_checkpoint(
+                os.path.abspath(FLAGS.checkpoint_path), agent.state, step=update_step, keep=20
+            )
+            print_green("bc pretraining done and saved checkpoint")
 
     # send the initial network to the actor
     server.publish_network(agent.state.params)
@@ -296,9 +347,7 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator, wandb_logger=N
 
 
 def main(_):
-    devices = jax.local_devices()
-    num_devices = len(devices)
-    sharding = jax.sharding.PositionalSharding(devices)
+    
     assert FLAGS.batch_size % num_devices == 0
     FLAGS.checkpoint_path = FLAGS.checkpoint_path + " " + datetime.now().strftime("%m%d-%H:%M")
 
