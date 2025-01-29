@@ -15,9 +15,11 @@ from gymnasium.wrappers import RecordEpisodeStatistics
 from serl_launcher.utils.timer_utils import Timer
 from serl_launcher.wrappers.chunking import ChunkingWrapper
 from serl_launcher.agents.continuous.bc_noimg import BCAgentNoImg
+from serl_launcher.agents.continuous.bc_traj_box import BCAgentTrajBox
 
 from serl_launcher.utils.launcher import (
     make_bc_agent_no_img,
+    make_bc_agent_traj_box,
     make_wandb_logger,
     make_replay_buffer,
 )
@@ -90,7 +92,8 @@ def main(_):
     env = RecordEpisodeStatistics(env)
 
     rng, sampling_rng = jax.random.split(rng)
-    agent: BCAgentNoImg = make_bc_agent_no_img(  # replace with no img one
+    agent: BCAgentTrajBox = make_bc_agent_traj_box( 
+    # agent: BCAgentNoImg = make_bc_agent_no_img(
         FLAGS.seed,
         env.observation_space.sample(),
         env.action_space.sample(),
@@ -244,6 +247,9 @@ def main(_):
                         
         except KeyboardInterrupt as e:
             print(f'\nProgram was interrupted, cleaning up...  ', e.__str__())  
+            
+        finally:
+            env.close()
 
         traj_infos = {k: [d[k] for d in traj_infos] for k in traj_infos[0]}  # list of dicts to dict of lists
         mean_infos = {"mean_" + key: np.mean(val) for key, val in traj_infos.items()}

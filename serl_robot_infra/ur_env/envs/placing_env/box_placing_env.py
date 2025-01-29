@@ -31,14 +31,6 @@ class BoxPlacingCornerEnv(UR5Env):
         # # Update observation space with merged spaces
         # self.observation_space = gym.spaces.Dict(obs_space_definition)
         
-        self.observation_space["state"]["boxes"] = gym.spaces.Box(
-            -np.inf, np.inf, shape=(6,)
-        )
-        
-        self.observation_space["state"]["trajectory"] = gym.spaces.Box(
-            -np.inf, np.inf, shape=(7,)
-        )
-        
         self.announced_goals = {
             'box_position': False,
             'ee_box_distance': False,
@@ -94,22 +86,26 @@ class BoxPlacingCornerEnv(UR5Env):
             return copy.deepcopy(dict(state=state_observation))
         
     def get_force_cost(self, obs):
-        return 2 * np.sum(np.power(obs["state"]["tcp_force"] + 4, 2))
+        if obs["state"]["tcp_force"][0] < -2 and obs["state"]["tcp_force"][0] > -5 \
+            and obs["state"]["tcp_force"][1] < -2 and obs["state"]["tcp_force"][1] > -5:
+            return 0
+        return 2 * np.sum(np.power(obs["state"]["tcp_force"][:2] + 3.5, 2))
     
     def update_force_goal(self, obs):
         force_goal = obs["state"]["tcp_force"][0] < -2 and obs["state"]["tcp_force"][1] < -2 \
-            and ((obs["state"]["tcp_force"][0] > -5 and obs["state"]["tcp_force"][1] > -5) and obs["state"]["gripper_state"][1] > 0.5)
+            and obs["state"]["tcp_force"][0] > -5 and obs["state"]["tcp_force"][1] > -5 and obs["state"]["gripper_state"][0] > 0.1
         if (force_goal and not self.announced_goals['forces']):
             self.announced_goals['forces'] = True
             self.force_cost = self.get_force_cost(obs)
-            print("Force reached!")
+            # print("Force reached!")
     
     def compute_reward(self, obs, action) -> float:
         # huge action gives negative reward (like in mountain car)
-        action_cost = 1 * np.sum(np.power(action, 2))
-        action_diff_cost = 2 * np.sum(np.power(obs["state"]["action"] - self.last_action, 2))
+        action_cost = 15 * np.sum(np.power(action, 2))
+        action_diff_cost = 10 * np.sum(np.power(action - self.last_action, 2))      
+                  
         self.last_action[:] = action
-        step_cost = 0.1
+        step_cost = 0.5
         
         suction_reward = 3 * float(obs["state"]["gripper_state"][1] > 0.5)
         suction_cost = 3. * float(obs["state"]["gripper_state"][1] < -0.5)
@@ -138,24 +134,24 @@ class BoxPlacingCornerEnv(UR5Env):
         cost_info = dict(
             action_cost=action_cost,
             step_cost=step_cost,
-            suction_reward=suction_reward,
-            suction_cost=suction_cost,
+            # suction_reward=suction_reward,
+            # suction_cost=suction_cost,
             orientation_cost=orientation_cost,
-            position_cost=position_cost,
+            # position_cost=position_cost,
             action_diff_cost=action_diff_cost,
             force_cost=force_cost,
-            total_cost=-(-action_cost - step_cost + suction_reward - suction_cost \
+            total_cost=-(-action_cost - step_cost \
                 - orientation_cost - position_cost - action_diff_cost - force_cost)
         )
         for key, info in cost_info.items():
             self.cost_infos[key] = info + (0. if key not in self.cost_infos else self.cost_infos[key])
-        cost_info["forces_reached"] = self.announced_goals['forces']
+        self.cost_infos["forces_reached"] = self.announced_goals['forces']
         
         if self.reached_goal_state(obs):
-            return 100. - action_cost - orientation_cost - position_cost - action_diff_cost - force_cost
+            return 100. - action_cost - orientation_cost - action_diff_cost - force_cost
         else:
-            return 0. + suction_reward - action_cost - orientation_cost - position_cost - \
-                suction_cost - step_cost - action_diff_cost - force_cost
+            return 0. - action_cost - orientation_cost - \
+                 - step_cost - action_diff_cost - force_cost
 
     def reached_goal_state(self, obs) -> bool:
         # obs[0] == gripper pressure, obs[4] == force in Z-axis
@@ -181,11 +177,13 @@ class BoxPlacingCornerEnv(UR5Env):
         
         if ee_box_distance_goal and not self.announced_goals['ee_box_distance']:
             self.announced_goals['ee_box_distance'] = True
-            print("End-effector distance to box reached!")
+            # print("End-effector distance to box reached!")
             
         if box_positon_goal and not self.announced_goals['box_position']:
-            print("Box position reached!")
+            # print("Box position reached!")
             self.announced_goals['box_position'] = True
+            
+        self.update_force_goal(obs)
                  
         # print("gripper_goal: ", gripper_goal, "force_goal: ", self.force_reached, "box_positon_goal: ", box_positon_goal, "ee_box_distance_goal: ", ee_box_distance_goal)
         return self.announced_goals['forces'] \

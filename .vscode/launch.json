@@ -1,47 +1,17 @@
 {
+    "version": "0.2.0",
     "configurations": [
         {
-            "type": "debugpy",
+            "type": "bashdb",
             "request": "launch",
-            "name": "Launch BC Spacemouse",
-            "program": "${workspaceFolder}/examples/robotiq_bc_spacemouse/record_demo.py",
-            "args": [],
-            "console": "integratedTerminal"
-        },
-        {
-            "type": "debugpy",
-            "request": "launch",
-            "name": "Launch Kinesthetic Teaching",
-            "program": "${workspaceFolder}/examples/robotiq_bc_kinesthetic/record_demo.py",
-            "args": [],
-            "console": "integratedTerminal"
-        },
-        {
-            "type": "debugpy",
-            "request": "launch",
-            "name": "Launch BC Expert Teaching",
-            "program": "${workspaceFolder}/examples/robotiq_bc_expert_teaching/record_demo.py",
-            "args": [],
-            "console": "integratedTerminal"
-        },
-        {
-            "type": "debugpy",
-            "request": "launch",
-            "name": "Launch Test Demo Kinesthetic",
-            "program": "${workspaceFolder}/examples/robotiq_bc_kinesthetic/test_demo.py",
+            "name": "Learn BC Placing",
+            "program": "${workspaceFolder}/examples/box_placing_bc/run_rbc_learner.sh",
             "args": [],
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/examples/robotiq_bc_kinesthetic"
-        },
-        {
-            "type": "debugpy",
-            "request": "launch",
-            "name": "Launch Test Demo Spacemouse",
-            "program": "${workspaceFolder}/examples/robotiq_bc_spacemouse/test_demo.py",
-            "args": [],
-            "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/examples/robotiq_bc_spacemouse"
-        },
+            "env": {
+                "CONDA_DEFAULT_ENV": "serl"
+            }
+        }
     ],
     "inputs": [
         {

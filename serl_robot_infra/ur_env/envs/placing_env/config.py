@@ -28,9 +28,9 @@ class UR5PlacingCornerConfig(DefaultEnvConfig):
     FORCEMODE_LIMITS = np.array([0.5, 0.5, 0.5, 1., 1., 1.])
 
     # GOAL_POSITION = np.array([-0.4, 0.095, -0.05])    #box_6
-    GOAL_POSITION = np.array([-0.46, -0.0465, 0.0311])    #box_1
+    GOAL_POSITION = np.array([-0.45, 0.02, -0.037])    #box_1
     POSE_ESTIMATION = True
     POSE_ESTIMATION_IP = "ws://localhost:7777"
     WF_rot = np.array([[-1,  0,  0],
-                        [ 0,  0, -1],
-                        [ 0, -1,  0]], dtype=np.float32)
+                        [ 0,  0, 1],
+                        [ 0, 1,  0]], dtype=np.float32)

@@ -150,7 +150,7 @@ class BoxPoseEstimation:
             try:
                 async with connect(self.ip_address) as websocket:
                     reconnect_attempts = 0  # Reset counter on successful connection
-                    print("Connected to server")
+                    # print("Connected to server")
                     while not self.stop_event.is_set():
                         if (not self.last_heartbeat or 
                             (datetime.now() - self.last_heartbeat).seconds >= self.HEARTBEAT_INTERVAL):
@@ -173,12 +173,12 @@ class BoxPoseEstimation:
                                     list(message['space'][0]['boxes'].keys())[0]
                                 ]['world2box']['rot']
                         except TimeoutError:
-                            print("Timeout error, continuing...")
+                            # print("Timeout error, continuing...")
                             self.last_heartbeat = None
                             continue
                           
             except Exception as e:
-                print(f"Connection error: {e}")
+                # print(f"Connection error: {e}")
                 reconnect_attempts += 1
                 
                 if reconnect_attempts >= self.MAX_RECONNECT_ATTEMPTS:

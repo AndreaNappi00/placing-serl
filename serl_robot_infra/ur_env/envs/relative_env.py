@@ -88,6 +88,8 @@ class RelativeFrame(gym.Wrapper):
         if self.config.POSE_ESTIMATION:
             obs["state"]["boxes"][:3] = self.rotation_matrix_reset.transpose() @ obs["state"]["boxes"][:3]
             obs["state"]["boxes"][3:6] = self.rotation_matrix_reset.transpose() @ obs["state"]["boxes"][3:6]
+            obs["state"]["trajectory"][:3] = self.rotation_matrix_reset.transpose() @ obs["state"]["trajectory"][:3]
+            obs["state"]["trajectory"][3:6] = self.rotation_matrix_reset.transpose() @ obs["state"]["trajectory"][3:6]
 
         if self.include_relative_pose:
             T_b_o = construct_homogeneous_matrix(obs["state"]["tcp_pose"])

@@ -224,7 +224,9 @@ class UR5Env(gym.Env):
                 "gripper_state": gym.spaces.Box(-1., 1., shape=(2,)),
                 "tcp_force": gym.spaces.Box(-np.inf, np.inf, shape=(3,)),
                 "tcp_torque": gym.spaces.Box(-np.inf, np.inf, shape=(3,)),
-                "action": gym.spaces.Box(-1., 1., shape=self.action_space.shape)
+                "action": gym.spaces.Box(-1., 1., shape=self.action_space.shape),
+                "boxes": gym.spaces.Box(-np.inf, np.inf, shape=(6,)),
+                "trajectory": gym.spaces.Box(-np.inf, np.inf, shape=(7,))
             }
         )
 
@@ -298,8 +300,8 @@ class UR5Env(gym.Env):
         return next_pos
 
     def get_cost_infos(self, done):
-        if not done:
-            return {}
+        # if not done:
+        #     return {}
         cost_infos = self.cost_infos.copy()
         self.cost_infos = {}
         return cost_infos
@@ -311,7 +313,7 @@ class UR5Env(gym.Env):
 
         # position
         next_pos = self.curr_pos.copy()
-        next_pos[:3] = next_pos[:3] + action[:3] * self.action_scale[0]
+        next_pos[:3] = next_pos[:3] + action[:3] * self.action_scale[0] # + self.trajectory_dir
 
         next_pos[3:] = (
                 R.from_mrp(action[3:6] * self.action_scale[1] / 4.) * R.from_quat(next_pos[3:])
@@ -464,7 +466,7 @@ class UR5Env(gym.Env):
         self.curr_path_length = 0
         
         if self.pose_est:
-            self.trajectory_dir = np.clip(self.goal_position - self.curr_reset_pose[:3], -0.1, 0.1)
+            self.trajectory_dir = np.clip(self.goal_position - self.curr_reset_pose[:3], -0.01, 0.01)
             self.trajectory_dir[2] = 0.
 
         obs = self._get_obs(np.zeros_like(self.last_action))

@@ -75,7 +75,7 @@ def make_bc_agent_no_img(
 def make_bc_agent_traj_box(
         seed, sample_obs, sample_action
 ):
-    return BCAgentNoImg.create(
+    return BCAgentTrajBox.create(
         jax.random.PRNGKey(seed),
         sample_obs,
         sample_action,
