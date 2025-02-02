@@ -68,12 +68,16 @@ class BoxPlacingCornerEnv(UR5Env):
         
         # position
         next_pos = self.curr_pos.copy()
-        next_pos[:3] = next_pos[:3] + action[:3] * self.action_scale[0]  + self.trajectory_dir * self.action_scale[0]  ### Comment this when inference
         
-        # print("trajectory_dir: ", self.trajectory_dir)
-        # print("action: ", action[:3])
-        # action[:3] = action[:3] - self.trajectory_dir                   ### Comment this when inference
+        if self.residual_learning_inference:    # evaluation or sac training
+            next_pos[:3] = next_pos[:3] + (action[:3] + self.trajectory_dir) * self.action_scale[0]
+            action[:3] += self.trajectory_dir   # for observation, action is complete and the same as demo recording
+        else:   #demo recording
+            next_pos[:3] = next_pos[:3] + action[:3] * self.action_scale[0]
+            self.adjusted_action = action
+            self.adjusted_action[:3] -= self.trajectory_dir
 
+        # orientation
         next_pos[3:] = (
                 R.from_mrp(action[3:6] * self.action_scale[1] / 4.) * R.from_quat(next_pos[3:])
         ).as_quat()             # c * r  --> applies c after r

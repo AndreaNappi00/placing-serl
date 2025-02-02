@@ -138,6 +138,7 @@ class UR5Env(gym.Env):
         self.pose_estimation_ip = config.POSE_ESTIMATION_IP
         self.pose_est = config.POSE_ESTIMATION
         self.WF_rot = config.WF_rot
+        self.residual_learning_inference = True
         
         # boxes
         self.box_pose = BoxPoseEstimation(self.pose_estimation_ip) if config.POSE_ESTIMATION else None
