@@ -80,6 +80,8 @@ class RelativeFrame(gym.Wrapper):
         """
         Transform observations from spatial(base) frame into body(end-effector) frame
         using the rotation and homogeneous matrix
+        
+        rotation_matrix_reset and rotation_matrix are the same?
         """
         obs["state"]["tcp_vel"][:3] = self.rotation_matrix_reset.transpose() @ obs["state"]["tcp_vel"][:3]
         obs["state"]["tcp_vel"][3:6] = self.rotation_matrix_reset.transpose() @ obs["state"]["tcp_vel"][3:6]

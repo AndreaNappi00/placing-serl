@@ -7,6 +7,7 @@ class UR5PlacingCornerConfig(DefaultEnvConfig):
     # RESET_Q = np.array([[1.3463, -1.3584,  1.9014, -2.1243, -1.5758, -0.2312]])
     RESET_Q = np.array([
         [-17.67, -74.775, 127.48, -143.71, -89.81, -27.89],
+        # [-5.67, -74.775, 127.48, -143.71, -89.81, -27.89]
     ])
     RESET_Q = np.deg2rad(RESET_Q)
     RANDOM_RESET = False
@@ -14,9 +15,9 @@ class UR5PlacingCornerConfig(DefaultEnvConfig):
     RANDOM_ROT_RANGE = (0.0,)
     # ABS_POSE_LIMIT_HIGH = np.array([0.14, -0.4, 0.2, 3.2, 0.1, 3.2])            # TODO euler rotations suck :/
     # ABS_POSE_LIMIT_LOW = np.array([-0.3, -0.7, -0.006, 3.0, -0.1, -3.2])
-    ABS_POSE_LIMIT_HIGH = np.array([-0.2, 0.2, 0.25, 0.05, 0.05, 0.2])
-    ABS_POSE_LIMIT_LOW = np.array([-0.6, -0.1, 0.1, -0.05, -0.05, -0.2])
-    ACTION_SCALE = np.array([0.02, 0.05, 2.], dtype=np.float32)
+    ABS_POSE_LIMIT_HIGH = np.array([-0.2, 0.1, 0.25, 0.05, 0.05, 0.2])
+    ABS_POSE_LIMIT_LOW = np.array([-0.6, -0.15, 0.12, -0.05, -0.05, -0.2])
+    ACTION_SCALE = np.array([0.01, 0.05, 1.], dtype=np.float32)
 
     ROBOT_IP: str = "192.168.1.66"
     CONTROLLER_HZ = 100
@@ -28,7 +29,8 @@ class UR5PlacingCornerConfig(DefaultEnvConfig):
     FORCEMODE_LIMITS = np.array([0.5, 0.5, 0.5, 1., 1., 1.])
 
     # GOAL_POSITION = np.array([-0.4, 0.095, -0.05])    #box_6
-    GOAL_POSITION = np.array([-0.45, 0.02, -0.037])    #box_1
+    GOAL_POSITION = np.array([-0.42, 0.04, -0.04])    #box_1
+    BOX_ERROR = np.array([0.03, 0, 0])
     POSE_ESTIMATION = True
     POSE_ESTIMATION_IP = "ws://localhost:7777"
     WF_rot = np.array([[-1,  0,  0],

@@ -41,10 +41,10 @@ class BCAgentTrajBox(flax.struct.PyTreeNode):
                 name="actor",
             )
             # trajectory = batch["observations"][:, 33:36]
-            # adjusted_actions_position = batch["actions"][:, :3] + trajectory
+            # adjusted_actions_position = batch["actions"][:, :3] - trajectory            # get delta_action
             # adjusted_actions = jnp.concatenate([adjusted_actions_position, batch["actions"][:, 3:]], axis=-1)
             
-            pi_actions = dist.mode()    #what the model thinks the action should be
+            pi_actions = dist.mode()    #what the model thinks the action should be, delta action
             log_probs = dist.log_prob(batch["actions"])
             # mse = ((pi_actions - adjusted_actions) ** 2).sum(-1)
             mse = ((pi_actions - batch["actions"]) ** 2).sum(-1)

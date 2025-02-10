@@ -28,7 +28,7 @@ from serl_launcher.data.data_store import (
     populate_data_store,
     populate_data_store_with_z_axis_only,
 )
-from serl_launcher.wrappers.serl_obs_wrappers import SerlObsWrapperNoImages, SerlObsWrapperTrajBox
+from serl_launcher.wrappers.serl_obs_wrappers import SerlObsWrapperNoImages, SerlObsWrapperTrajBox, ScaleObservationWrapper
 from serl_launcher.networks.reward_classifier import load_classifier_func
 from ur_env.envs.wrappers import SpacemouseIntervention, Quat2MrpWrapper
 from ur_env.envs.relative_env import RelativeFrame
@@ -87,6 +87,7 @@ def main(_):
     # env = SpacemouseIntervention(env)
     env = RelativeFrame(env)
     env = Quat2MrpWrapper(env)
+    env = ScaleObservationWrapper(env)
     env = SerlObsWrapperTrajBox(env)
     # env = ChunkingWrapper(env, obs_horizon=1, act_exec_horizon=None)
     env = RecordEpisodeStatistics(env)
@@ -227,7 +228,7 @@ def main(_):
 
                     if done or truncated:
                         print("Success! Reward: ", reward)
-                        success_counter += (reward > 50.)
+                        success_counter += (reward > 0.5)
                         dt = time.time() - start_time
                         running_reward = np.sum(np.asarray([t["rewards"] for t in trajectory]))
                         running_reward = max(running_reward, -100.)
@@ -235,11 +236,11 @@ def main(_):
                         print(f"{success_counter}/{episode + 1} ", end=' ')
                         print(f"time: {dt:.3f}s  running_rew: {running_reward:.2f}")
 
-                        trajectories.append({"traj": trajectory, "time": dt, "success": (reward > 50.)})
+                        trajectories.append({"traj": trajectory, "time": dt, "success": (reward > 0.5)})
                         infos = {
                             "running_reward": running_reward,
                             "time": dt,
-                            "success_rate": float(reward > 50.),
+                            "success_rate": float(reward > 0.5),
                             "action_cost": np.linalg.norm(np.asarray([t["actions"] for t in trajectory]), axis=1, ord=2).mean()
                         }
                         traj_infos.append(infos)

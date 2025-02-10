@@ -139,6 +139,7 @@ class UR5Env(gym.Env):
         self.pose_est = config.POSE_ESTIMATION
         self.WF_rot = config.WF_rot
         self.residual_learning_inference = True
+        self.box_error = config.BOX_ERROR
         
         # boxes
         self.box_pose = BoxPoseEstimation(self.pose_estimation_ip) if config.POSE_ESTIMATION else None
@@ -465,11 +466,6 @@ class UR5Env(gym.Env):
 
         shift = self.go_to_rest()
         self.curr_path_length = 0
-        
-        if self.pose_est:
-            self.trajectory_dir = self.goal_position - self.curr_reset_pose[:3]
-            self.trajectory_dir[2] = 0.
-            self.trajectory_dir /= np.linalg.norm(self.trajectory_dir) * 2
 
         obs = self._get_obs(np.zeros_like(self.last_action))
         return obs, {"reset_shift": shift}

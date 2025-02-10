@@ -41,26 +41,41 @@ class BoxPlacingCornerEnv(UR5Env):
         self.force_cost = 0.
         self.upper_bound = -2
         self.lower_bound = -10
+        self.force_desired = 6          #in absolute value
+        self.force_tolerance = 4
+        self.angle_tolerance = np.pi/2 
     
     def reset(self, **kwargs):
+        # input("press a key to start again!")
+
         self.last_action[:] = 0.
         self.announced_goals['forces'] = False
         self.announced_goals['box_position'] = False
         self.announced_goals['ee_box_distance'] = False
         self.force_cost = 0.
         
+        if self.pose_est:
+            self.trajectory_dir = np.array([0., 0., 0.])
+            self._update_box_pos_estimate()
+            self.goal_direction = self.goal_position - (self.box_position + self.box_error)
+            self.goal_direction[2] = 0.
+            self.goal_direction /= np.linalg.norm(self.goal_direction) * 2
+        
         return super().reset(**kwargs)
     
     def _update_trajectory_dir(self):
-        if self.announced_goals['forces']:
-            self.trajectory_dir = np.array([0., 0., 1.]) * 0.01 #move up
-    
-    def _update_trajectory(self):
-        self._update_trajectory_dir()
-        target_pos =  self.curr_pos[:3] + self.trajectory_dir
-        target_rot = self.curr_pos[3:]
-        self.trajectory = np.concatenate([target_pos, target_rot])
-        
+        if self.announced_goals['forces']: #move up
+            self.trajectory_dir = np.array([0., 0., 1.]) * 0.5
+        elif self.gripper_state[0]:   # go to goal
+            self.trajectory_dir = self.goal_position - (self.box_position + self.box_error)
+            self.trajectory_dir[2] = 0.
+            self.trajectory_dir /= np.linalg.norm(self.trajectory_dir) * 2
+        else:   # box dropped # go to box
+            target_picking = self.box_position + self.box_error
+            target_picking[2] = self.goal_position[2] + 0.18
+            self.trajectory_dir = target_picking - self.curr_pos[:3]
+            self.trajectory_dir /= np.linalg.norm(self.trajectory_dir) * 2
+                
     def step(self, action: np.ndarray) -> tuple:
         """standard gym step function."""
         start_time = time.time()
@@ -68,14 +83,19 @@ class BoxPlacingCornerEnv(UR5Env):
         
         # position
         next_pos = self.curr_pos.copy()
-        
-        if self.residual_learning_inference:    # evaluation or sac training
-            next_pos[:3] = next_pos[:3] + (action[:3] + self.trajectory_dir) * self.action_scale[0]
-            action[:3] += self.trajectory_dir   # for observation, action is complete and the same as demo recording
-        else:   #demo recording
-            next_pos[:3] = next_pos[:3] + action[:3] * self.action_scale[0]
-            self.adjusted_action = action
-            self.adjusted_action[:3] -= self.trajectory_dir
+                
+        # if self.residual_learning_inference:    # evaluation or sac training
+        #     next_pos[:3] = next_pos[:3] + (action[:3] + self.trajectory_dir) * self.action_scale[0]
+        #     action[:3] += self.trajectory_dir   # for observation, action is complete and the same as demo recording
+        # else:   #demo recording
+        #     next_pos[:3] = next_pos[:3] + action[:3] * self.action_scale[0]
+        #     self.adjusted_action = action
+        #     self.adjusted_action[:3] -= self.trajectory_dir
+        #     self.cost_infos["intervene_action"] = self.adjusted_action
+        #### the action gets pushed to -1, -1, -1, -1, -1, -1, -1 fix
+        next_pos[:3] = next_pos[:3] + (action[:3] + self.trajectory_dir) * self.action_scale[0]
+        # next_pos[:3] = next_pos[:3] + (action[:3]) * self.action_scale[0]
+        self.cost_infos["intervene_action"] = action
 
         # orientation
         next_pos[3:] = (
@@ -114,16 +134,16 @@ class BoxPlacingCornerEnv(UR5Env):
         if self.camera_mode is not None:
             images = self.get_image()
             
+        self._update_currpos()
+        
         if self.pose_est:
             self._update_box_pos_estimate()
             self._update_box_orientation_estimate()
-            self._update_trajectory()
+            self._update_trajectory_dir()
         else:
             self.box_position = np.array([0.5, 0.5, 0.5])
             self.box_orientation = np.array([0., 0., 0.])
-            self.trajectory = np.array([0., 0., 0., 0., 0., 0., 0.])
-            
-        self._update_currpos()
+            self.trajectory_dir = np.array([0., 0., 0.])
                 
         state_observation = {
             "tcp_pose": self.curr_pos,
@@ -133,7 +153,7 @@ class BoxPlacingCornerEnv(UR5Env):
             "tcp_torque": self.curr_torque,
             "action": action,
             "boxes": np.concatenate([self.box_position, R.from_rotvec(self.box_orientation).as_mrp()]), # in robot_base frame
-            "trajectory": self.trajectory
+            "trajectory": np.concatenate([self.trajectory_dir, np.zeros(4)])
         }
 
         if images is not None:
@@ -141,19 +161,34 @@ class BoxPlacingCornerEnv(UR5Env):
         else:
             return copy.deepcopy(dict(state=state_observation))
         
+    # def get_force_cost(self, obs):
+    #     cost = 0.
+    #     if self.announced_goals['forces']:
+    #         return self.force_cost - 1
+    #     if obs["state"]["gripper_state"][0] < 0.1:
+    #         return 0.
+    #     for i in range(2):
+    #         if obs["state"]["tcp_force"][i] > 0:
+    #             cost += 10 * np.power(obs["state"]["tcp_force"][i], 2)
+    #         elif obs["state"]["tcp_force"][i] > self.upper_bound and obs["state"]["tcp_force"][i] < -1:
+    #             cost -= 10 * np.power(obs["state"]["tcp_force"][i] + 4, 2)              # this is pretty useless
+    #         elif obs["state"]["tcp_force"][i] < self.lower_bound:
+    #             cost += 2 * np.power(obs["state"]["tcp_force"][i] + ((self.upper_bound - self.lower_bound)/2 + self.lower_bound), 2)
+    #     # print("force 1:", obs["state"]["tcp_force"][0], "force 2:", obs["state"]["tcp_force"][1], "cost: ", cost)
+    #     return cost
     def get_force_cost(self, obs):
-        cost = 0.
-        if self.announced_goals['forces']:
-            return self.force_cost - 1
-        if obs["state"]["gripper_state"][0] < 0.1:
-            return 0.
-        for i in range(2):
-            if obs["state"]["tcp_force"][i] > self.upper_bound and obs["state"]["tcp_force"][i] < -1:
-                cost -= 10 * np.power(obs["state"]["tcp_force"][i] + 4, 2)              # this is pretty useless
-            elif obs["state"]["tcp_force"][i] < self.lower_bound:
-                cost += 2 * np.power(obs["state"]["tcp_force"][i] + ((self.upper_bound - self.lower_bound)/2 + self.lower_bound), 2)
-        # print("force 1:", obs["state"]["tcp_force"][0], "force 2:", obs["state"]["tcp_force"][1], "cost: ", cost)
-        return cost
+        alpha_reward = 5
+        alpha_cost = 1
+        delta_err_x = self.force_desired - obs["state"]["tcp_force"][0]
+        delta_err_y = self.force_desired - obs["state"]["tcp_force"][1]
+        
+        reward =  alpha_reward * np.exp(- (delta_err_x ** 2 + delta_err_y ** 2) / (self.force_tolerance ** 2))
+        magnitude_cost = alpha_cost * np.power(np.max([0, np.linalg.norm(obs["state"]["tcp_force"]) - (self.force_desired + self.force_tolerance)]), 2)
+        direction = obs["state"]["tcp_force"] / np.linalg.norm(obs["state"]["tcp_force"])
+        direction_cost = alpha_cost * np.power(np.max([0, np.cos(self.angle_tolerance) - np.dot(obs["state"]["tcp_force"], direction) / (np.linalg.norm(obs["state"]["tcp_force"] * 1e-6))]), 2)
+        cost = magnitude_cost + direction_cost
+        
+        return cost - reward
     
     def update_force_goal(self, obs):
         force_goal = obs["state"]["tcp_force"][0] < self.upper_bound and obs["state"]["tcp_force"][1] < self.upper_bound \
@@ -166,22 +201,23 @@ class BoxPlacingCornerEnv(UR5Env):
             self.force_cost = self.get_force_cost(obs)
     
     def compute_reward(self, obs, action) -> float:
-        # huge action gives negative reward (like in mountain car)
         
-        # print("action norm:", np.linalg.norm(action[:3]))
-        action_cost = 2 * np.sum(np.power(action, 2))
-        # print("action_cost: ", action_cost)
-        action_diff_cost = 1 * np.sum(np.power(action - self.last_action, 2))    
-        # print("action_diff_cost: ", action_diff_cost)
+        # huge action gives negative reward (like in mountain car)
+        delta_pos = action[:3]/2 - self.trajectory_dir
+        action_cost = 2 * np.sum(np.power(delta_pos, 2))
+        action_diff_cost = 2 * np.sum(np.power(action - self.last_action, 2))    
                   
         self.last_action[:] = action
-        step_cost = 0.5
+        step_cost = 0.1
         
+        suction_cost = 0
+        suction_reward = 0
         if self.announced_goals['forces']:
-            suction_reward = 0.
+            suction_reward = 1 * float(action[6] < -0.5)
+        elif obs["state"]["gripper_state"][1] > 0.5:
+            suction_reward = 1
         else:
-            suction_reward = 3 * float(obs["state"]["gripper_state"][1] > 0.5)
-        suction_cost = 3. * float(obs["state"]["gripper_state"][1] < -0.5)
+            suction_cost = 1 * float(action[6] > 0.5)
 
         pose = obs["state"]["tcp_pose"]
         
@@ -214,12 +250,13 @@ class BoxPlacingCornerEnv(UR5Env):
             total_cost=-(-action_cost - step_cost + suction_reward - suction_cost\
                 - orientation_cost - action_diff_cost - force_cost)
         )
+        print("cost_info: ", cost_info)
         for key, info in cost_info.items():
             self.cost_infos[key] = info + (0. if key not in self.cost_infos else self.cost_infos[key])
         self.cost_infos["forces_reached"] = self.announced_goals['forces']
         
         if self.reached_goal_state(obs):
-            return 100. - action_cost - orientation_cost - action_diff_cost - force_cost - suction_cost + suction_reward
+            return 10. - action_cost - orientation_cost - action_diff_cost - force_cost - suction_cost + suction_reward
         else:
             return 0. - action_cost - orientation_cost - suction_cost \
                  - step_cost - action_diff_cost - force_cost + suction_reward
@@ -238,6 +275,7 @@ class BoxPlacingCornerEnv(UR5Env):
         orientation_goal = sum(obs["state"]["tcp_pose"][3:] * self.curr_reset_pose[3:]) ** 2 > 0.85
         box_positon_goal = np.linalg.norm(obs["state"]["boxes"][:3] - goal[:3]) < 0.05
         # print("box pos: ", obs["state"]["boxes"][:3], "reached?: ", box_positon_goal, "error?: ", np.linalg.norm(obs["state"]["boxes"][:3] - goal[:3]))
+        # print("tcp pos: ", obs["state"]["tcp_pose"][:3])
         # print("force: ", obs["state"]["tcp_force"], "reached?: ", force_goal)
         box_orientation_goal = sum(obs["state"]["boxes"][3:] * np.array([0, 0, 1])) ** 2 > 0.9
         ee_box_distance_goal = np.linalg.norm(obs["state"]["tcp_pose"][2] - obs["state"]["boxes"][2]) > 0.2

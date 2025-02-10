@@ -33,10 +33,15 @@ from serl_launcher.utils.launcher import (
     make_replay_buffer,
 )
 
-from serl_launcher.wrappers.serl_obs_wrappers import SerlObsWrapperNoImages
+from serl_launcher.wrappers.serl_obs_wrappers import SerlObsWrapperNoImages, ScaleObservationWrapper, SerlObsWrapperTrajBox
 from ur_env.envs.wrappers import SpacemouseIntervention, Quat2MrpWrapper
 
 import ur_env
+
+from serl_launcher.utils.sampling_utils import TemporalActionEnsemble
+
+
+from colorama import Fore, Style
 
 FLAGS = flags.FLAGS
 
@@ -60,14 +65,14 @@ flags.DEFINE_integer("training_starts", 1000, "Training starts after this step."
 flags.DEFINE_integer("steps_per_update", 10, "Number of steps per update the server.")
 
 flags.DEFINE_integer("log_period", 10, "Logging period.")
-flags.DEFINE_integer("eval_period", 2000, "Evaluation period.")
+flags.DEFINE_integer("eval_period", 1000, "Evaluation period.")
 flags.DEFINE_integer("eval_n_trajs", 3, "Number of trajectories for evaluation.")
 
 # flag to indicate if this is a leaner or a actor
 flags.DEFINE_boolean("learner", False, "Is this a learner or a trainer.")
 flags.DEFINE_boolean("actor", False, "Is this a learner or a trainer.")
 flags.DEFINE_string("ip", "localhost", "IP address of the learner.")
-flags.DEFINE_integer("checkpoint_period", 10000, "Period to save checkpoints.")
+flags.DEFINE_integer("checkpoint_period", 1000, "Period to save checkpoints.")
 flags.DEFINE_string("checkpoint_path", '/home/andrea/Code/placing-serl/examples/box_placing_sac/checkpoints',
                     "Path to save checkpoints.")
 
@@ -82,7 +87,11 @@ flags.DEFINE_boolean(
     "debug", False, "Debug mode."
 )  # debug mode will disable wandb logging
 
-flags.DEFINE_integer("pretrain_steps", 0, "Pretrain the policy with BC.")
+flags.DEFINE_string("load_checkpoint_path", '/home/andrea/Code/placing-serl/examples/box_picking_sac/checkpoints',
+                    "Path to load previously saved checkpoints and start training from them.")
+flags.DEFINE_boolean("evaluation", False, "Evaluation mode.")
+
+flags.DEFINE_string("wandb_project", "placing", "Wandb project name.")
 
 def print_green(x):
     return print("\033[92m {}\033[00m".format(x))
@@ -93,6 +102,8 @@ devices = jax.local_devices()
 num_devices = len(devices)
 sharding = jax.sharding.PositionalSharding(devices)
 
+test_bc = False
+
 ##############################################################################
 
 
@@ -100,7 +111,12 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
     """
     This is the actor loop, which runs when "--actor" is set to True.
     """
-    if FLAGS.eval_checkpoint_step:
+    if FLAGS.eval_checkpoint_step and FLAGS.evaluation:
+        wandb_logger = make_wandb_logger(
+        project=FLAGS.wandb_project,  # TODO only temporary
+        description=FLAGS.exp_name or FLAGS.env,
+        debug=FLAGS.debug,
+        )
         success_counter = 0
         time_list = []
 
@@ -162,13 +178,18 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
     # training loop
     timer = Timer()
     running_return = 0.0
-    for step in tqdm.tqdm(range(FLAGS.max_steps), dynamic_ncols=True):
+    
+    action_ensemble = TemporalActionEnsemble(activated=False)
+    pbar = tqdm.tqdm(range(FLAGS.max_steps), dynamic_ncols=True)
+    for step in pbar:
         timer.tick("total")
+        action_ensemble.reset()
 
         with timer.context("sample_actions"):
             if step < FLAGS.random_steps:
                 # print("sampling randomly!")
                 actions = env.action_space.sample()
+
             else:
                 sampling_rng, key = jax.random.split(sampling_rng)
                 actions = agent.sample_actions(
@@ -178,12 +199,24 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
                     # deterministic=False,              # sample without argmax for more diverse actions
                 )
                 actions = np.asarray(jax.device_get(actions))
+                print("action:", actions)
+            ensembled_action = action_ensemble.sample(actions)
 
         # Step environment
         with timer.context("step_env"):
-            next_obs, reward, done, truncated, info = env.step(actions)
+            if test_bc:
+                next_obs, reward, done, truncated, info = env.step(ensembled_action)
+            else:
+                next_obs, reward, done, truncated, info = env.step(actions)
             next_obs = np.asarray(next_obs, dtype=np.float32)
             reward = np.asarray(reward, dtype=np.float32)
+            
+            if "forces_reached" in info:
+                forces_announced = info["forces_reached"]
+            else:
+                forces_announced = False
+            status_text = f"{Fore.GREEN if forces_announced else Fore.RED}{'True' if forces_announced else 'False'}{Style.RESET_ALL}"
+            pbar.set_description(f"Status: {status_text}")
 
             running_return += reward
 
@@ -260,50 +293,20 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator, wandb_logger=N
     pbar.update(len(replay_buffer) - pbar.n)  # Update progress bar
     pbar.close()
     
-    demo_iterator = replay_buffer.get_iterator(
-        sample_args={
-            "batch_size": FLAGS.batch_size,
-            "pack_obs_and_next_obs": True,
-        },
-        device=sharding.replicate(),
-    )
     
-    # Pretrain BC policy to get started
     update_step = 0
-    if FLAGS.pretrain_steps:
-        if os.path.isdir(
-            os.path.join(
-                FLAGS.checkpoint_path, f"checkpoint_{FLAGS.pretrain_steps}"
-            )
-        ):
-            print_green(
-                f"BC checkpoint at {FLAGS.pretrain_steps} steps found, restoring BC checkpoint"
-            )
-            ckpt = checkpoints.restore_checkpoint(
-                os.path.abspath(FLAGS.checkpoint_path), agent.state, step=FLAGS.pretrain_steps
-            )
-            agent = agent.replace(state=ckpt)
-            update_step = FLAGS.pretrain_steps
-        else:
-            update_step = 0
-            print_yellow(
-                f"No BC checkpoint at {FLAGS.pretrain_steps} steps found, starting from scratch"
-            )
-            for step in tqdm.tqdm(
-                range(FLAGS.pretrain_steps),
-                dynamic_ncols=True,
-                desc="bc_pretraining",
-            ):
-                update_step += 1
-                batch = next(demo_iterator)
-                agent, bc_update_info = agent.update(batch)
-                if update_step % FLAGS.log_period == 0 and wandb_logger:
-                    wandb_logger.log({"bc": bc_update_info}, step=update_step)
-            checkpoints.save_checkpoint(
-                os.path.abspath(FLAGS.checkpoint_path), agent.state, step=update_step, keep=20
-            )
-            print_green("bc pretraining done and saved checkpoint")
+    if FLAGS.eval_checkpoint_step:
+        print_yellow("loading checkpoint")
+        ckpt = checkpoints.restore_checkpoint(
+            FLAGS.load_checkpoint_path,
+            agent.state,
+            step=FLAGS.eval_checkpoint_step,
+        )
+        agent = agent.replace(state=ckpt)
 
+
+    # send the initial network to the actor
+        
     # send the initial network to the actor
     server.publish_network(agent.state.params)
     print_green("sent initial network to actor")
@@ -361,11 +364,12 @@ def main(_):
         max_episode_length=FLAGS.max_traj_length,
         camera_mode="none",
     )
-    if FLAGS.actor:
-        env = SpacemouseIntervention(env)
+    # if FLAGS.actor:
+    #     env = SpacemouseIntervention(env)
     env = RelativeFrame(env)
     env = Quat2MrpWrapper(env)
-    env = SerlObsWrapperNoImages(env)
+    env = ScaleObservationWrapper(env)
+    env = SerlObsWrapperTrajBox(env)
     # env = ChunkingWrapper(env, obs_horizon=1, act_exec_horizon=None)
     # env = TransformReward(env, lambda r: FLAGS.reward_scale * r)
     env = RecordEpisodeStatistics(env)

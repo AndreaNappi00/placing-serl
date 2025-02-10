@@ -11,7 +11,7 @@ from pynput import keyboard
 from colorama import Fore, Style
 
 from ur_env.envs.wrappers import SpacemouseIntervention, Quat2MrpWrapper
-from serl_launcher.wrappers.serl_obs_wrappers import SerlObsWrapperNoImages
+from serl_launcher.wrappers.serl_obs_wrappers import SerlObsWrapperNoImages, SerlObsWrapperTrajBox, ScaleObservationWrapper
 from serl_launcher.wrappers.chunking import ChunkingWrapper
 
 from gymnasium.wrappers import TransformReward
@@ -37,7 +37,8 @@ if __name__ == "__main__":
     env = SpacemouseIntervention(env)
     env = RelativeFrame(env)
     env = Quat2MrpWrapper(env)
-    env = SerlObsWrapperNoImages(env)
+    env = ScaleObservationWrapper(env)
+    env = SerlObsWrapperTrajBox(env)
     # env = TransformReward(env, lambda r: 10. * r)
     # env = ChunkingWrapper(env, obs_horizon=1, act_exec_horizon=None)
 

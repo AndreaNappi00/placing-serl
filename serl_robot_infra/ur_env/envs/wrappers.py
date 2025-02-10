@@ -278,8 +278,9 @@ class SpacemouseIntervention(gym.ActionWrapper):
 
         self.invert_axes = [-1, -1, 1, -1, -1, 1]
         self.deadspace = 0.15
-        self.residual_learning_inference = False
-
+        
+        self.env.unwrapped.residual_learning_inference = False
+        
     def action(self, action: np.ndarray) -> np.ndarray:
         """
         Input:
@@ -340,7 +341,7 @@ class SpacemouseIntervention(gym.ActionWrapper):
         new_action = self.action(action)
         # print(f"new action: {new_action}")
         obs, rew, done, truncated, info = self.env.step(new_action)
-        info["intervene_action"] = self.adjusted_action     ##change this if you want to use the spacemouse action
+        # info["intervene_action"] = new_action     ##change this if you want to use the spacemouse action
         info["left"] = self.left.any()
         info["right"] = self.right.any()
         return obs, rew, done, truncated, info

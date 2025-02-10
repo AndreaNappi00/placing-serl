@@ -56,7 +56,6 @@ class SerlObsWrapperTrajBox(gym.ObservationWrapper):
     def observation(self, obs):
         # Flatten state component
         obs = flatten(self.env.observation_space["state"], obs["state"])
-        
         return obs
 
 
@@ -94,4 +93,9 @@ class ScaleObservationWrapper(gym.ObservationWrapper):
         obs["state"]["tcp_vel"][3:] *= self.rotation_scale
         obs["state"]["tcp_force"] *= self.force_scale
         obs["state"]["tcp_torque"] *= self.torque_scale
+        obs["state"]["boxes"][:3] *= self.translation_scale
+        obs["state"]["boxes"][3:] *= self.rotation_scale
+        obs["state"]["trajectory"][:3] *= self.translation_scale
+        obs["state"]["trajectory"][3:] *= self.rotation_scale
+        
         return obs

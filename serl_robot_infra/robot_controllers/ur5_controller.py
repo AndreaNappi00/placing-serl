@@ -291,6 +291,8 @@ class UrImpedanceController(threading.Thread):
             await self.robotiq_gripper.automatic_release()
             self.target_grip[0] = 0.0
             # print("release")
+        # elif self.target_grip[0] < -0.5:
+        #     print("gripper not activated, but release requested")
 
     def _truncate_check(self):
         downward_force = self.curr_force_lowpass[2] > 20.
