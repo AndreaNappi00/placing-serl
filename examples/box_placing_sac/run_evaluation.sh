@@ -5,8 +5,8 @@ python sac_policy.py "$@" \
     --env box_placing_corner_env \
     --wandb_project box_placing_sac \
     --exp_name=sac_drq_policy_evaluation \
-    --eval_checkpoint_path "checkpoints" \
-    --eval_checkpoint_step 10000 \
+    --eval_checkpoint_path "checkpoints 0218-19:46" \
+    --eval_checkpoint_step 23000 \
     --eval_n_trajs 10 \
     --evaluation \
     --debug

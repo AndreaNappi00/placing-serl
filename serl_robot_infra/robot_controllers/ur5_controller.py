@@ -196,7 +196,7 @@ class UrImpedanceController(threading.Thread):
             self.curr_Qd[:] = Qd
             self.curr_force[:] = np.array(force)
             # use moving average (5), since the force fluctuates heavily
-            self.curr_force_lowpass[:] = 0.1 * np.array(force) + 0.9 * self.curr_force_lowpass[:]
+            self.curr_force_lowpass[:] = 0.9 * np.array(force) + 0.1 * self.curr_force_lowpass[:]
             self.gripper_state[:] = [pressure, grip_status]
 
     def get_state(self):
@@ -238,7 +238,8 @@ class UrImpedanceController(threading.Thread):
 
         # check for big downward tcp force and adapt accordingly
         if self.curr_force[2] > 3.5 and force_pos[2] < 0.:
-            force_pos[2] = max((1.5 - self.curr_force_lowpass[2]), 0.) * force_pos[2] + min(self.curr_force_lowpass[2] - 0.5, 1.) * 20.
+            pass
+            # force_pos[2] = max((1.5 - self.curr_force_lowpass[2]), 0.) * force_pos[2] + min(self.curr_force_lowpass[2] - 0.5, 1.) * 20.
 
         return np.concatenate((force_pos, torque))
 
@@ -295,7 +296,7 @@ class UrImpedanceController(threading.Thread):
         #     print("gripper not activated, but release requested")
 
     def _truncate_check(self):
-        downward_force = self.curr_force_lowpass[2] > 20.
+        downward_force = self.curr_force_lowpass[2] > 30.
         if downward_force:  # TODO add better criteria
             self._is_truncated.set()
         else:

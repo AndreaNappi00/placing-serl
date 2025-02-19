@@ -4,7 +4,7 @@ python sac_policy.py "$@" \
     --actor \
     --env box_placing_corner_env \
     --exp_name=sac_drq_policy \
-    --max_traj_length 300 \
+    --max_traj_length 150 \
     --seed 42 \
     --max_steps 10000 \
     --random_steps 0 \

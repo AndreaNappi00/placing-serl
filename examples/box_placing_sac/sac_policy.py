@@ -48,7 +48,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string("env", "box_picking_basic_env", "Name of environment.")
 flags.DEFINE_string("agent", "sac", "Name of agent.")
 flags.DEFINE_string("exp_name", "sac_drq_policy", "Name of the experiment for wandb logging.")
-flags.DEFINE_integer("max_traj_length", 100, "Maximum length of trajectory.")
+flags.DEFINE_integer("max_traj_length", 150, "Maximum length of trajectory.")
 flags.DEFINE_integer("seed", 42, "Random seed.")
 flags.DEFINE_bool("save_model", True, "Whether to save model.")
 flags.DEFINE_integer("batch_size", 256, "Batch size.")
@@ -60,8 +60,8 @@ flags.DEFINE_integer("replay_buffer_capacity", 1000000, "Replay buffer capacity.
 flags.DEFINE_multi_string("demo_paths", None,
                           "paths to demos")
 
-flags.DEFINE_integer("random_steps", 1000, "Sample random actions for this many steps.")
-flags.DEFINE_integer("training_starts", 1000, "Training starts after this step.")
+flags.DEFINE_integer("random_steps", 100, "Sample random actions for this many steps.")
+flags.DEFINE_integer("training_starts", 100, "Training starts after this step.")
 flags.DEFINE_integer("steps_per_update", 10, "Number of steps per update the server.")
 
 flags.DEFINE_integer("log_period", 10, "Logging period.")
@@ -107,18 +107,14 @@ test_bc = False
 ##############################################################################
 
 
-def actor(agent: SACAgent, data_store, env, sampling_rng):
+def actor(agent: SACAgent, data_store, env, sampling_rng, wandb_logger=None):
     """
     This is the actor loop, which runs when "--actor" is set to True.
     """
     if FLAGS.eval_checkpoint_step and FLAGS.evaluation:
-        wandb_logger = make_wandb_logger(
-        project=FLAGS.wandb_project,  # TODO only temporary
-        description=FLAGS.exp_name or FLAGS.env,
-        debug=FLAGS.debug,
-        )
         success_counter = 0
         time_list = []
+        running_reward = 0.0 
 
         ckpt = checkpoints.restore_checkpoint(
             FLAGS.eval_checkpoint_path,
@@ -127,6 +123,7 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
         )
         agent = agent.replace(state=ckpt)
 
+        step = 0
         for episode in range(FLAGS.eval_n_trajs):
             obs, _ = env.reset()
             done = False
@@ -141,16 +138,22 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
 
                 next_obs, reward, done, truncated, info = env.step(actions)
                 obs = next_obs
+                running_reward += reward
+                wandb_logger.log(info, step=step)
+                
+                step += 1
 
                 if done:
                     if reward:
                         dt = time.time() - start_time
                         time_list.append(dt)
-                        print(dt)
+                        print("execution time: ", dt)
 
-                    success_counter += int(reward > 0.99)
-                    print(reward)
+                    success_counter += int(reward > 50)
+                    print("reward: ", reward)
+                    print("running reward: ", running_reward)
                     print(f"{success_counter}/{episode + 1}")
+                    running_reward = 0.0
 
         print(f"success rate: {success_counter / FLAGS.eval_n_trajs}")
         print(f"average time: {np.mean(time_list)}")
@@ -199,7 +202,6 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
                     # deterministic=False,              # sample without argmax for more diverse actions
                 )
                 actions = np.asarray(jax.device_get(actions))
-                print("action:", actions)
             ensembled_action = action_ensemble.sample(actions)
 
         # Step environment
@@ -208,15 +210,14 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
                 next_obs, reward, done, truncated, info = env.step(ensembled_action)
             else:
                 next_obs, reward, done, truncated, info = env.step(actions)
+            wandb_logger.log(info, step=step)
             next_obs = np.asarray(next_obs, dtype=np.float32)
             reward = np.asarray(reward, dtype=np.float32)
             
-            if "forces_reached" in info:
-                forces_announced = info["forces_reached"]
-            else:
-                forces_announced = False
-            status_text = f"{Fore.GREEN if forces_announced else Fore.RED}{'True' if forces_announced else 'False'}{Style.RESET_ALL}"
-            pbar.set_description(f"Status: {status_text}")
+            forces_status = f"{Fore.GREEN if info.get('forces') else Fore.RED}{'True' if info.get('forces') else 'False'}{Style.RESET_ALL}"
+            box_status = f"{Fore.GREEN if info.get('box_position') else Fore.RED}{'True' if info.get('box_position') else 'False'}{Style.RESET_ALL}"
+            pbar.set_description(f"Forces: {forces_status}, Box: {box_status}")
+
 
             running_return += reward
 
@@ -337,7 +338,7 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator, wandb_logger=N
             if FLAGS.checkpoint_period and (update_steps + 1) % FLAGS.checkpoint_period == 0:
                 assert FLAGS.checkpoint_path is not None
                 checkpoints.save_checkpoint(
-                    FLAGS.checkpoint_path, agent.state, step=update_steps + 1, keep=20
+                    FLAGS.checkpoint_path, agent.state, step=update_steps + 1, keep=100
                 )
 
             update_steps += 1
@@ -404,10 +405,22 @@ def main(_):
             debug=FLAGS.debug,
         )
         return replay_buffer, wandb_logger
-
+    
+    wandb_logger = make_wandb_logger(
+            project="placing",
+            description=FLAGS.exp_name or FLAGS.env,
+            debug=FLAGS.debug,
+        )
+    
     if FLAGS.learner:
         sampling_rng = jax.device_put(sampling_rng, device=sharding.replicate())
-        replay_buffer, wandb_logger = create_replay_buffer_and_wandb_logger()
+        replay_buffer = make_replay_buffer(
+            env,
+            capacity=FLAGS.replay_buffer_capacity,
+            type="replay_buffer",
+            rlds_logger_path=FLAGS.log_rlds_path,
+            preload_rlds_path=FLAGS.preload_rlds_path,
+        )
 
         if FLAGS.preload_rlds_path is None and FLAGS.demo_paths is not None:
             print(f"loaded demos from {FLAGS.demo_paths}")  # load demo trajectories the old way
@@ -436,7 +449,7 @@ def main(_):
         # actor loop
         print_green("starting actor loop")
         try:
-            actor(agent, data_store, env, sampling_rng)
+            actor(agent, data_store, env, sampling_rng, wandb_logger)
             print_green("actor loop finished")
         except KeyboardInterrupt:
             print_green("actor loop interrupted")

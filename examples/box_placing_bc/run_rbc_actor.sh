@@ -8,4 +8,4 @@ python bc_policy.py "$@" \
     --batch_size 256 \
     --eval_checkpoint_step 10000 \
     --checkpoint_path "/home/andrea/Code/placing-serl/examples/box_placing_bc/checkpoints" \
-    --debug # wandb is disabled when debug
+    # --debug # wandb is disabled when debug

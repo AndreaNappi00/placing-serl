@@ -7,7 +7,7 @@ class UR5PlacingCornerConfig(DefaultEnvConfig):
     # RESET_Q = np.array([[1.3463, -1.3584,  1.9014, -2.1243, -1.5758, -0.2312]])
     RESET_Q = np.array([
         [-17.66, -80.24, 124.91, -134.67, -89.81, -28.40],
-        # [-5.67, -74.775, 127.48, -143.71, -89.81, -27.89]
+        # [-17.66, -90.24, 124.91, -134.67, -89.81, -28.40],
     ])
     RESET_Q = np.deg2rad(RESET_Q)
     RANDOM_RESET = False
@@ -29,10 +29,12 @@ class UR5PlacingCornerConfig(DefaultEnvConfig):
     FORCEMODE_LIMITS = np.array([0.5, 0.5, 0.5, 1., 1., 1.])
 
     # GOAL_POSITION = np.array([-0.4, 0.095, -0.05])    #box_6
-    GOAL_POSITION = np.array([-0.42, 0.04, -0.04])    #box_1
-    BOX_ERROR = np.array([0.03, 0, 0])
+    GOAL_POSITION = np.array([-0.4, 0.1, -0.04])    #box_1
+    TARGET_ORIENTATION = np.array([-2.22, -2.22, 0]) #as exponential coordinates aka rotation vector
+    BOX_ERROR = np.array([0., 0., 0])
     POSE_ESTIMATION = True
     POSE_ESTIMATION_IP = "ws://localhost:7777"
     WF_rot = np.array([[-1,  0,  0],
                         [ 0,  0, 1],
                         [ 0, 1,  0]], dtype=np.float32)
+    LOW_PASS_FILTER = 0

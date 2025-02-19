@@ -5,7 +5,7 @@ python bc_policy.py "$@" \
     --exp_name=bc_drq_policy \
     --seed 67 \
     --batch_size 256 \
-    --demo_paths "demos/ur5_test_20_demos_2025-02-07_13-26-58.pkl" \
+    --demo_paths "demos/ur5_test_20_demos_2025-02-18_19-24-51.pkl" \
     --eval_checkpoint_step 0 \
     --checkpoint_path "/home/andrea/Code/placing-serl/examples/box_placing_bc/checkpoints" \
     # --debug # wandb is   disabled when debug

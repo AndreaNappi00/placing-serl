@@ -140,6 +140,8 @@ class UR5Env(gym.Env):
         self.WF_rot = config.WF_rot
         self.residual_learning_inference = True
         self.box_error = config.BOX_ERROR
+        self.target_orientation = config.TARGET_ORIENTATION
+        self.low_pass_filter_k = config.LOW_PASS_FILTER
         
         # boxes
         self.box_pose = BoxPoseEstimation(self.pose_estimation_ip) if config.POSE_ESTIMATION else None
@@ -228,7 +230,7 @@ class UR5Env(gym.Env):
                 "tcp_torque": gym.spaces.Box(-np.inf, np.inf, shape=(3,)),
                 "action": gym.spaces.Box(-1., 1., shape=self.action_space.shape),
                 "boxes": gym.spaces.Box(-np.inf, np.inf, shape=(6,)),
-                "trajectory": gym.spaces.Box(-np.inf, np.inf, shape=(7,))
+                "trajectory": gym.spaces.Box(-np.inf, np.inf, shape=(6,))
             }
         )
 
@@ -302,8 +304,8 @@ class UR5Env(gym.Env):
         return next_pos
 
     def get_cost_infos(self, done):
-        # if not done:
-        #     return {}
+        if not done:
+            return self.cost_infos.copy()
         cost_infos = self.cost_infos.copy()
         self.cost_infos = {}
         return cost_infos
@@ -656,7 +658,7 @@ class UR5Env(gym.Env):
 
     def _update_box_orientation_estimate(self):
         self.box_orientation = self.box_pose.get_box_orientation()
-        self.box_orientation = self.WF_rot @ self.box_orientation
+        self.box_orientation = (R.from_matrix(self.WF_rot) * R.from_rotvec(self.box_orientation)).as_rotvec()
         
     def _get_goal_position(self):
         """

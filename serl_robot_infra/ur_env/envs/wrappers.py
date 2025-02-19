@@ -281,6 +281,10 @@ class SpacemouseIntervention(gym.ActionWrapper):
         
         self.env.unwrapped.residual_learning_inference = False
         
+    def reset(self, **kwargs):
+        input("press a key to start again!")
+        return self.env.reset()
+
     def action(self, action: np.ndarray) -> np.ndarray:
         """
         Input:

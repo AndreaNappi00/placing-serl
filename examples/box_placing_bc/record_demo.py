@@ -89,20 +89,17 @@ if __name__ == "__main__":
 
             obs = next_obs
             
-            if "forces_reached" in info:
-                forces_announced = info["forces_reached"]
-            else:
-                forces_announced = False
-            status_text = f"{Fore.GREEN if forces_announced else Fore.RED}{'True' if forces_announced else 'False'}{Style.RESET_ALL}"
-            pbar.set_description(f"Status: {status_text}")
+            forces_status = f"{Fore.GREEN if info.get('forces') else Fore.RED}{'True' if info.get('forces') else 'False'}{Style.RESET_ALL}"
+            box_status = f"{Fore.GREEN if info.get('box_position') else Fore.RED}{'True' if info.get('box_position') else 'False'}{Style.RESET_ALL}"
+            pbar.set_description(f"Forces: {forces_status}, Box: {box_status}")
 
             if done:
-                success_count += int(rew > 0.99)
+                success_count += int(rew > 50)
                 total_count += 1
                 print(
                     f"{rew}\tGot {success_count} successes of {total_count} trials. {success_needed} successes needed."
                 )
-                pbar.update(int(rew > 0.99))
+                pbar.update(int(rew > 50))
                 obs, _ = env.reset()
 
         with open(file_path, "wb") as f:

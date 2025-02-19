@@ -221,6 +221,7 @@ def main(_):
                     wandb_dict = {
                         "gripper_action": actions[-1],
                     }
+                    wandb_dict.update(info)
                     wandb_logger.log(wandb_dict, step=it)
                     trajectory.append(transition)
                     obs = next_obs
@@ -228,19 +229,19 @@ def main(_):
 
                     if done or truncated:
                         print("Success! Reward: ", reward)
-                        success_counter += (reward > 0.5)
+                        success_counter += (reward > 50)
                         dt = time.time() - start_time
                         running_reward = np.sum(np.asarray([t["rewards"] for t in trajectory]))
-                        running_reward = max(running_reward, -100.)
+                        running_reward = max(running_reward, -1000.)
 
                         print(f"{success_counter}/{episode + 1} ", end=' ')
                         print(f"time: {dt:.3f}s  running_rew: {running_reward:.2f}")
 
-                        trajectories.append({"traj": trajectory, "time": dt, "success": (reward > 0.5)})
+                        trajectories.append({"traj": trajectory, "time": dt, "success": (reward > 50)})
                         infos = {
                             "running_reward": running_reward,
                             "time": dt,
-                            "success_rate": float(reward > 0.5),
+                            "success_rate": float(reward > 50),
                             "action_cost": np.linalg.norm(np.asarray([t["actions"] for t in trajectory]), axis=1, ord=2).mean()
                         }
                         traj_infos.append(infos)
