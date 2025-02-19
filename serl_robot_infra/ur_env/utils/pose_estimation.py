@@ -27,7 +27,9 @@ async def read_vision_from_server_main():
             #                         [ 0, -1,  0]]) @ np.array(box_position)
             # print(f"rotated frame {box_position}")
             # send message to mantain the connection alive
-            print(message)
+            print( message['space'][0]['boxes'][
+                                    list(message['space'][0]['boxes'].keys())[0]
+                                ]['world2box']['rot'])
             await websocket.send("a")
 
             # if len(messages) < 500:

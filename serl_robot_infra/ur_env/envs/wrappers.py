@@ -293,20 +293,24 @@ class SpacemouseIntervention(gym.ActionWrapper):
         - action: spacemouse action if nonezero; else, policy action
         """
         expert_a = self.get_deadspace_action()
+        intervened = False
 
+        # If the SpaceMouse is moved or buttons are pressed, update the last intervention time.
         if np.linalg.norm(
                 expert_a) > 0.001 or self.left.any() or self.right.any():  # also read buttons with no movement
             self.last_intervene = time.time()
+            intervened = True
 
+        # Handle gripper action if gripper control is enabled.
         if self.gripper_enabled:
             gripper_action = np.zeros((1,)) + int(self.left.any()) - int(self.right.any())
             expert_a = np.concatenate((expert_a, gripper_action), axis=0)
 
-        if time.time() - self.last_intervene < 0.5:
+        if time.time() - self.last_intervene < 0.5 and intervened:
             expert_a = self.adapt_spacemouse_output(expert_a)
-            return expert_a
+            return expert_a, True
 
-        return action
+        return action, False
 
     def get_deadspace_action(self) -> np.ndarray:
         expert_a, buttons = self.expert.get_action()
@@ -342,12 +346,21 @@ class SpacemouseIntervention(gym.ActionWrapper):
         return action
 
     def step(self, action):
-        new_action = self.action(action)
+        new_action, replaced = self.action(action)
         # print(f"new action: {new_action}")
         obs, rew, done, truncated, info = self.env.step(new_action)
         # info["intervene_action"] = new_action     ##change this if you want to use the spacemouse action
+
+        # Add additional information to the info dictionary about the intervention.
+        if replaced:
+            info["hil_action"] = new_action # key for the human in the loop action
+            
+        info["intervene_action"] = new_action
+        
         info["left"] = self.left.any()
         info["right"] = self.right.any()
+        
+        # Return the observation, reward, done flag, truncation flag, and info dictionary.
         return obs, rew, done, truncated, info
 
 
