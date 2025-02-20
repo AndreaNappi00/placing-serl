@@ -238,8 +238,8 @@ class UrImpedanceController(threading.Thread):
 
         # check for big downward tcp force and adapt accordingly
         if self.curr_force[2] > 3.5 and force_pos[2] < 0.:
-            pass
-            # force_pos[2] = max((1.5 - self.curr_force_lowpass[2]), 0.) * force_pos[2] + min(self.curr_force_lowpass[2] - 0.5, 1.) * 20.
+            # pass
+            force_pos[2] = max((1.5 - self.curr_force_lowpass[2]), 0.) * force_pos[2] + min(self.curr_force_lowpass[2] - 0.5, 1.) * 20.
 
         return np.concatenate((force_pos, torque))
 

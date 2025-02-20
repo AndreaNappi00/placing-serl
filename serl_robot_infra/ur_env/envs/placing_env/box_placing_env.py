@@ -192,8 +192,8 @@ class BoxPlacingCornerEnv(UR5Env):
         magnitude_cost = alpha_cost * np.power(np.max([0, np.linalg.norm(obs["state"]["tcp_force"]) - (np.abs(self.force_desired) + self.force_tolerance)]), 2)
         direction = obs["state"]["tcp_force"] / np.linalg.norm(obs["state"]["tcp_force"])
         direction_cost = alpha_cost * np.power(np.max([0, np.cos(self.angle_tolerance) - np.dot(obs["state"]["tcp_force"], direction) / (np.linalg.norm(obs["state"]["tcp_force"] * 1e-6))]), 2)
-        z_cost = alpha_cost * np.power(np.max([0, np.abs(obs["state"]["tcp_force"][2]) - 5]), 2)
-        cost = magnitude_cost + direction_cost + z_cost
+        z_cost = alpha_cost * np.power(np.max([0, np.abs(obs["state"]["tcp_force"][2]) - 20]), 2)
+        cost = magnitude_cost + z_cost
         
         return cost - reward
     
@@ -233,16 +233,15 @@ class BoxPlacingCornerEnv(UR5Env):
         suction_cost = 0
         suction_reward = 0
         if self.announced_goals['forces']:
-            suction_reward = 1 * float(action[6] < -0.5)
+            suction_reward = 2 * float(action[-1] < -0.5)
         elif obs["state"]["gripper_state"][1] > 0.5:
-            suction_reward = 1
+            suction_reward = 2
         else:
-            suction_cost = 2 * float(action[6] > 0.5)
-
-        pose = obs["state"]["tcp_pose"]
+            suction_cost = 1 * float(action[-1] > 0.5)
         
-        orientation_cost = 1. - sum(obs["state"]["tcp_pose"][3:] * self.curr_reset_pose[3:]) ** 2
-        orientation_cost = max(orientation_cost - 0.005, 0.) * 1.
+        relative_rotation = R.from_quat(obs["state"]["tcp_pose"][3:]) * R.from_quat(self.curr_reset_pose[3:]).inv()
+        angle = relative_rotation.magnitude()
+        orientation_cost = max(angle - 0.005, 0.) * 1.
         
         max_pose_diff = 0.05  # set to 5cm
         pos_diff = obs["state"]["tcp_pose"][:2] - self.goal_position[:2]
@@ -272,8 +271,8 @@ class BoxPlacingCornerEnv(UR5Env):
             action_diff_cost=action_diff_cost,
             force_cost=force_cost,
             gripper_release_cost=gripper_release_cost,
-            total_cost=-(-action_cost - step_cost + suction_reward - suction_cost\
-                - orientation_cost - action_diff_cost - force_cost - gripper_release_cost + orientation_cost_box)
+            total_reward=-action_cost - step_cost + suction_reward - suction_cost \
+                - orientation_cost - action_diff_cost - force_cost - gripper_release_cost + orientation_cost_box
         )
         for key, info in cost_info.items():
             self.cost_infos[key] = info + (0. if key not in self.cost_infos else self.cost_infos[key])
@@ -283,6 +282,7 @@ class BoxPlacingCornerEnv(UR5Env):
         self.clip_costs()
         
         if self.reached_goal_state(obs):
+            self.config.SUCCESS_COUNT += 1
             return 200. - action_cost - orientation_cost - action_diff_cost - force_cost \
                 - suction_cost + suction_reward - orientation_cost_box - gripper_release_cost
         else:

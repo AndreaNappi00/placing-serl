@@ -396,8 +396,8 @@ def main(_):
         max_episode_length=FLAGS.max_traj_length,
         camera_mode="none",
     )
-    # if FLAGS.actor:
-    #     env = SpacemouseIntervention(env)
+    if FLAGS.actor:
+        env = SpacemouseIntervention(env)
     env = RelativeFrame(env)
     env = Quat2MrpWrapper(env)
     env = ScaleObservationWrapper(env)

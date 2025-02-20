@@ -265,6 +265,17 @@ class DemonstrationWrapper(gym.ActionWrapper):
         info["right"] = self.right.any()
         return obs, rew, done, truncated, info
 
+class InterruptActionWrapper(gym.ActionWrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        
+    def reset(self, **kwargs):
+        input("press a key to start again!")
+        return self.env.reset()
+
+    def step(self, action):
+        return self.env.step(action)
+
 class SpacemouseIntervention(gym.ActionWrapper):
     def __init__(self, env, gripper_action_span=3):
         super().__init__(env)
@@ -280,10 +291,6 @@ class SpacemouseIntervention(gym.ActionWrapper):
         self.deadspace = 0.15
         
         self.env.unwrapped.residual_learning_inference = False
-        
-    def reset(self, **kwargs):
-        input("press a key to start again!")
-        return self.env.reset()
 
     def action(self, action: np.ndarray) -> np.ndarray:
         """

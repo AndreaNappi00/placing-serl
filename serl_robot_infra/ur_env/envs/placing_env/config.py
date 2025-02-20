@@ -38,3 +38,4 @@ class UR5PlacingCornerConfig(DefaultEnvConfig):
                         [ 0,  0, 1],
                         [ 0, 1,  0]], dtype=np.float32)
     LOW_PASS_FILTER = 0
+    SUCCESS_COUNT = 0

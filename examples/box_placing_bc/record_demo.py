@@ -10,7 +10,7 @@ from pprint import pprint
 from pynput import keyboard
 from colorama import Fore, Style
 
-from ur_env.envs.wrappers import SpacemouseIntervention, Quat2MrpWrapper
+from ur_env.envs.wrappers import SpacemouseIntervention, Quat2MrpWrapper, InterruptActionWrapper
 from serl_launcher.wrappers.serl_obs_wrappers import SerlObsWrapperNoImages, SerlObsWrapperTrajBox, ScaleObservationWrapper
 from serl_launcher.wrappers.chunking import ChunkingWrapper
 
@@ -39,6 +39,7 @@ if __name__ == "__main__":
     env = Quat2MrpWrapper(env)
     env = ScaleObservationWrapper(env)
     env = SerlObsWrapperTrajBox(env)
+    env = InterruptActionWrapper(env)
     # env = TransformReward(env, lambda r: 10. * r)
     # env = ChunkingWrapper(env, obs_horizon=1, act_exec_horizon=None)
 

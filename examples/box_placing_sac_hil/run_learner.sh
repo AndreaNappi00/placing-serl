@@ -1,6 +1,6 @@
 export XLA_PYTHON_CLIENT_PREALLOCATE=false && \
 export XLA_PYTHON_CLIENT_MEM_FRACTION=.3 && \
-python sac_policy.py "$@" \
+python sac_policy_hil.py "$@" \
     --learner \
     --env box_placing_corner_env \
     --exp_name=sac_drq_policy \
