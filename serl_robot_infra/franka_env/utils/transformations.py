@@ -43,3 +43,10 @@ def construct_homogeneous_matrix(tcp_pose):
     T[:3, 3] = translation
     T[3, 3] = 1
     return T
+
+def construct_homogenous_vector(vector):
+    """
+    Construct the homogeneous vector from given vector.
+    args: vector: (x, y, z)
+    """
+    return np.array([vector[0], vector[1], vector[2], 1])

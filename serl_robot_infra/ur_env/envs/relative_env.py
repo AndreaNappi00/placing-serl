@@ -4,7 +4,8 @@ import numpy as np
 from gym import Env
 from franka_env.utils.transformations import (
     construct_homogeneous_matrix,
-    construct_rotation_matrix
+    construct_rotation_matrix,
+    construct_homogenous_vector
 )
 
 from ur_env.envs.placing_env.config import UR5PlacingCornerConfig
@@ -31,16 +32,14 @@ class RelativeFrame(gym.Wrapper):
     }, and at least 6 DoF action space with (x, y, z, rx, ry, rz, ...)
     """
 
-    def __init__(self, env: Env, include_relative_pose=True):
+    def __init__(self, env: Env):
         super().__init__(env)
         self.config = UR5PlacingCornerConfig
         self.rotation_matrix = np.eye((3))
         self.rotation_matrix_reset = np.eye((3))
 
-        self.include_relative_pose = include_relative_pose
-        if self.include_relative_pose:
-            # Homogeneous transformation matrix from reset pose's relative frame to base frame
-            self.T_r_o_inv = np.zeros((4, 4))
+        # Homogeneous transformation matrix from reset pose's relative frame to base frame
+        self.T_r_o_inv = np.zeros((4, 4))
 
     def step(self, action: np.ndarray):
         # action is assumed to be (x, y, z, rx, ry, rz, gripper)
@@ -67,11 +66,11 @@ class RelativeFrame(gym.Wrapper):
 
         self.rotation_matrix = construct_rotation_matrix(obs["state"]["tcp_pose"])
         self.rotation_matrix_reset = self.rotation_matrix.copy()
-        if self.include_relative_pose:
-            # Update transformation matrix from the reset pose's relative frame to base frame
-            self.T_r_o_inv = np.linalg.inv(
-                construct_homogeneous_matrix(obs["state"]["tcp_pose"])
-            )
+        
+        # Update transformation matrix from the reset pose's relative frame to base frame
+        self.T_r_o_inv = np.linalg.inv(
+            construct_homogeneous_matrix(obs["state"]["tcp_pose"])
+        )
 
         # Transform observation to spatial frame
         return self.transform_observation(obs), info
@@ -87,21 +86,21 @@ class RelativeFrame(gym.Wrapper):
         obs["state"]["tcp_vel"][3:6] = self.rotation_matrix_reset.transpose() @ obs["state"]["tcp_vel"][3:6]
         obs["state"]["tcp_force"] = self.rotation_matrix.transpose() @ obs["state"]["tcp_force"]
         obs["state"]["tcp_torque"] = self.rotation_matrix.transpose() @ obs["state"]["tcp_torque"]
+            
+        T_b_o = construct_homogeneous_matrix(obs["state"]["tcp_pose"])
+        T_b_r = self.T_r_o_inv @ T_b_o
+
+        # Reconstruct transformed tcp_pose vector
+        p_b_r = T_b_r[:3, 3]
+        theta_b_r = R.from_matrix(T_b_r[:3, :3]).as_quat()
+        obs["state"]["tcp_pose"] = np.concatenate((p_b_r, theta_b_r))
+        
         if self.config.POSE_ESTIMATION:
-            obs["state"]["boxes"][:3] = self.rotation_matrix_reset.transpose() @ obs["state"]["boxes"][:3]
-            obs["state"]["boxes"][3:6] = self.rotation_matrix_reset.transpose() @ obs["state"]["boxes"][3:6]
+            obs["state"]["boxes"][:3] = (self.T_r_o_inv @ construct_homogenous_vector(obs["state"]["boxes"][:3]))[:3]
+            obs["state"]["boxes"][3:6] = (R.from_matrix(T_b_r[:3, :3]) * R.from_rotvec(obs["state"]["boxes"][3:6])).as_rotvec()
             obs["state"]["trajectory"][:3] = self.rotation_matrix_reset.transpose() @ obs["state"]["trajectory"][:3]
-            obs["state"]["trajectory"][3:6] = self.rotation_matrix_reset.transpose() @ obs["state"]["trajectory"][3:6]
-
-        if self.include_relative_pose:
-            T_b_o = construct_homogeneous_matrix(obs["state"]["tcp_pose"])
-            T_b_r = self.T_r_o_inv @ T_b_o
-
-            # Reconstruct transformed tcp_pose vector
-            p_b_r = T_b_r[:3, 3]
-            theta_b_r = R.from_matrix(T_b_r[:3, :3]).as_quat()
-            obs["state"]["tcp_pose"] = np.concatenate((p_b_r, theta_b_r))
-
+            obs["state"]["trajectory"][3:6] = (R.from_matrix(self.rotation_matrix_reset.transpose()) * R.from_rotvec(obs["state"]["trajectory"][3:6])).as_rotvec()
+        
         return obs
 
     def transform_action(self, action: np.ndarray):

@@ -73,13 +73,13 @@ flags.DEFINE_boolean("learner", False, "Is this a learner or a trainer.")
 flags.DEFINE_boolean("actor", False, "Is this a learner or a trainer.")
 flags.DEFINE_string("ip", "localhost", "IP address of the learner.")
 flags.DEFINE_integer("checkpoint_period", 1000, "Period to save checkpoints.")
-flags.DEFINE_string("checkpoint_path", '/home/andrea/Code/placing-serl/examples/box_placing_sac/checkpoints',
+flags.DEFINE_string("checkpoint_path", '/home/andrea/Code/placing-serl/examples/box_placing_sac_hil/checkpoints',
                     "Path to save checkpoints.")
 
 flags.DEFINE_integer("eval_checkpoint_step", 0, "evaluate the policy from ckpt at this step")
 flags.DEFINE_string("eval_checkpoint_path", None, "evaluate the policy from ckpt from this path")
 
-flags.DEFINE_string("log_rlds_path", '/home/andrea/Code/placing-serl/examples/box_placing_sac/rlds',
+flags.DEFINE_string("log_rlds_path", '/home/andrea/Code/placing-serl/examples/box_placing_sac_hil/rlds',
                     "Path to save RLDS logs.")
 flags.DEFINE_string("preload_rlds_path", None, "Path to preload RLDS data.")
 
@@ -87,7 +87,7 @@ flags.DEFINE_boolean(
     "debug", False, "Debug mode."
 )  # debug mode will disable wandb logging
 
-flags.DEFINE_string("load_checkpoint_path", '/home/andrea/Code/placing-serl/examples/box_picking_sac/checkpoints',
+flags.DEFINE_string("load_checkpoint_path", '/home/andrea/Code/placing-serl/examples/box_picking_sac_hil/checkpoints',
                     "Path to load previously saved checkpoints and start training from them.")
 flags.DEFINE_boolean("evaluation", False, "Evaluation mode.")
 
@@ -140,6 +140,10 @@ def actor(agent: SACAgent, data_store, env, sampling_rng, wandb_logger=None):
                 obs = next_obs
                 running_reward += reward
                 wandb_logger.log(info, step=step)
+                
+                forces_status = f"{Fore.GREEN if info.get('forces') else Fore.RED}{'True' if info.get('forces') else 'False'}{Style.RESET_ALL}"
+                box_status = f"{Fore.GREEN if info.get('box_position') else Fore.RED}{'True' if info.get('box_position') else 'False'}{Style.RESET_ALL}"
+                print(f"Forces: {forces_status}, Box: {box_status}, Reward: {reward}, Running Reward: {running_reward}", end='\r')
                 
                 step += 1
 
@@ -233,7 +237,6 @@ def actor(agent: SACAgent, data_store, env, sampling_rng, wandb_logger=None):
             forces_status = f"{Fore.GREEN if info.get('forces') else Fore.RED}{'True' if info.get('forces') else 'False'}{Style.RESET_ALL}"
             box_status = f"{Fore.GREEN if info.get('box_position') else Fore.RED}{'True' if info.get('box_position') else 'False'}{Style.RESET_ALL}"
             pbar.set_description(f"Forces: {forces_status}, Box: {box_status}")
-
 
             running_return += reward
 

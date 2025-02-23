@@ -37,15 +37,14 @@ class BoxPlacingCornerEnv(UR5Env):
             'ee_box_distance': False,
             'forces': False,
         }
-        self.upper_bound = -8
-        self.lower_bound = -18
-        self.force_desired = -13
-        self.force_tolerance = 4
+        self.force_desired = -12
+        self.force_tolerance = 3
         self.angle_tolerance = np.pi/3*2
     
     def reset(self, **kwargs):
         
         self.last_action[:] = 0.
+        self.force_goal_history = np.zeros(10)
         self.announced_goals['forces'] = False
         self.announced_goals['box_position'] = False
         self.announced_goals['ee_box_distance'] = False
@@ -61,20 +60,21 @@ class BoxPlacingCornerEnv(UR5Env):
         return super().reset(**kwargs)
     
     def _update_trajectory_dir(self):
+        scaling = 4
         if self.announced_goals['forces']: #move up slowly
             if self.gripper_state[1]:
                 self.trajectory_dir = np.zeros(6)
             else: # move up
-                self.trajectory_dir[:3] = np.array([0., 0., 1.]) * (1/3)
+                self.trajectory_dir[:3] = np.array([0., 0., 1.]) * (1/scaling)
         elif self.gripper_state[0]:   # go to goal
             self.trajectory_dir[:3] = self.goal_position + 0.002 * np.random.randint(-10*np.ones(3), 10*np.ones(3)) - (self.box_position + self.box_error)
             self.trajectory_dir[2] = 0.
-            self.trajectory_dir[:3] /= np.linalg.norm(self.trajectory_dir[:3]) * 3
+            self.trajectory_dir[:3] /= np.linalg.norm(self.trajectory_dir[:3]) * scaling
         else:   # box dropped # go to box
             target_picking = self.box_position + self.box_error
             target_picking[2] = self.goal_position[2] + 0.18
             self.trajectory_dir[:3] = target_picking - self.curr_pos[:3]
-            self.trajectory_dir[:3] /= np.linalg.norm(self.trajectory_dir[:3]) * 3
+            self.trajectory_dir[:3] /= np.linalg.norm(self.trajectory_dir[:3]) * scaling
         
         self.trajectory_dir[3:] = (
             R.from_rotvec(self.target_orientation) * R.from_rotvec(-self.box_orientation)
@@ -96,7 +96,7 @@ class BoxPlacingCornerEnv(UR5Env):
             action_filtered = action
             
         next_pos[:3] = next_pos[:3] + (action_filtered[:3] + self.trajectory_dir[:3]) * self.action_scale[0]
-        # next_pos[:3] = next_pos[:3] + (self.trajectory_dir) * self.action_scale[0]
+        # next_pos[:3] = next_pos[:3] + (self.trajectory_dir[:3]) * self.action_scale[0]
         
         self.cost_infos["intervene_action"] = action
 
@@ -165,21 +165,6 @@ class BoxPlacingCornerEnv(UR5Env):
         else:
             return copy.deepcopy(dict(state=state_observation))
         
-    # def get_force_cost(self, obs):
-    #     cost = 0.
-    #     if self.announced_goals['forces']:
-    #         return self.force_cost - 1
-    #     if obs["state"]["gripper_state"][0] < 0.1:
-    #         return 0.
-    #     for i in range(2):
-    #         if obs["state"]["tcp_force"][i] > 0:
-    #             cost += 10 * np.power(obs["state"]["tcp_force"][i], 2)
-    #         elif obs["state"]["tcp_force"][i] > self.upper_bound and obs["state"]["tcp_force"][i] < -1:
-    #             cost -= 10 * np.power(obs["state"]["tcp_force"][i] + 4, 2)              # this is pretty useless
-    #         elif obs["state"]["tcp_force"][i] < self.lower_bound:
-    #             cost += 2 * np.power(obs["state"]["tcp_force"][i] + ((self.upper_bound - self.lower_bound)/2 + self.lower_bound), 2)
-    #     # print("force 1:", obs["state"]["tcp_force"][0], "force 2:", obs["state"]["tcp_force"][1], "cost: ", cost)
-    #     return cost
     def get_force_cost(self, obs):
         if self.announced_goals['forces']:
             return 0.
@@ -198,13 +183,24 @@ class BoxPlacingCornerEnv(UR5Env):
         return cost - reward
     
     def update_force_goal(self, obs):
-        force_goal = obs["state"]["tcp_force"][0] < self.upper_bound and obs["state"]["tcp_force"][1] < self.upper_bound \
-            and obs["state"]["tcp_force"][0] > self.lower_bound and obs["state"]["tcp_force"][1] > self.lower_bound and obs["state"]["gripper_state"][0] > 0.1
-        if any(obs["state"]["tcp_force"][i] < self.lower_bound for i in range(2)):
-            force_goal = False
-            self.announced_goals['forces'] = False
-        elif (force_goal and not self.announced_goals['forces']):
+        forces = obs["state"]["tcp_force"][:2]
+        gripper_active = obs["state"]["gripper_state"][1] > 0.5
+        release_action = obs["state"]["action"][-1] < -0.5
+
+        force_goal = all(
+            np.abs(self.force_desired) - self.force_tolerance < np.abs(force)
+            for force in forces
+        )
+        
+        if self.announced_goals['forces'] and release_action:
+            pass
+        elif force_goal or sum(self.force_goal_history) > 3:
             self.announced_goals['forces'] = True
+        elif gripper_active:
+            self.announced_goals['forces'] = False
+        self.force_goal_history = np.roll(self.force_goal_history, 1)
+        self.force_goal_history[0] = force_goal
+        
     
     def clip_costs(self):
         if "orientation_cost" in self.cost_infos:
@@ -257,8 +253,7 @@ class BoxPlacingCornerEnv(UR5Env):
         # position_cost += 10. * height_diff if height_diff > max_height_diff else 0.
         
         force_cost = self.get_force_cost(obs)
-        # print("forces: ", obs["state"]["tcp_force"])
-        
+        self.update_force_goal(obs)
         
         cost_info = dict(
             action_cost=action_cost,
@@ -316,8 +311,6 @@ class BoxPlacingCornerEnv(UR5Env):
         if ee_box_distance_goal and not self.announced_goals['ee_box_distance']:
             # print("End-effector distance to box reached!")
             self.announced_goals['ee_box_distance'] = True
-            
-        self.update_force_goal(obs)
                  
         # print("gripper_goal: ", gripper_goal, "force_goal: ", self.force_reached, "box_positon_goal: ", box_positon_goal, "ee_box_distance_goal: ", ee_box_distance_goal)
         return self.announced_goals['forces'] \

@@ -150,6 +150,7 @@ class UR5Env(gym.Env):
         self.box_orientation = np.zeros((3,), dtype=np.float32)
         self.init_box_orientation = np.zeros((3,), dtype=np.float32)
         self._get_goal_position()
+        self.rotation_generalization = config.ROTATION_GENERALIZATION
 
         self.gripper_state = np.zeros((2,), dtype=np.float32)
         self.random_reset = config.RANDOM_RESET
@@ -658,7 +659,7 @@ class UR5Env(gym.Env):
 
     def _update_box_orientation_estimate(self):
         self.box_orientation = self.box_pose.get_box_orientation()
-        self.box_orientation = (R.from_matrix(self.WF_rot) * R.from_rotvec(self.box_orientation)).as_rotvec()
+        self.box_orientation = (R.from_matrix(self.rotation_generalization) * R.from_matrix(self.WF_rot) * R.from_rotvec(self.box_orientation)).as_rotvec()
         
     def _get_goal_position(self):
         """
