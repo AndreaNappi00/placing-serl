@@ -94,7 +94,11 @@ class BoxPlacingCornerEnv(UR5Env):
             action_filtered = np.mean(self.low_pass_filter, axis=1)
         else:
             action_filtered = action
-            
+        print("action", action)
+        action_filtered[:3] = self.other_corner_rot @ action_filtered[:3]
+        action_filtered[3:6] = self.other_corner_rot @ action_filtered[3:6]
+        print("action_filtered", action_filtered)
+        
         next_pos[:3] = next_pos[:3] + (action_filtered[:3] + self.trajectory_dir[:3]) * self.action_scale[0]
         # next_pos[:3] = next_pos[:3] + (self.trajectory_dir[:3]) * self.action_scale[0]
         
@@ -148,6 +152,9 @@ class BoxPlacingCornerEnv(UR5Env):
             self.box_position = np.array([0.5, 0.5, 0.5])
             self.box_orientation = np.array([0., 0., 0.])
             self.trajectory_dir = np.zeros(6)
+            
+        action[:3] = self.other_corner_rot @ action[:3]
+        action[3:6] = self.other_corner_rot @ action[3:6]
                 
         state_observation = {
             "tcp_pose": self.curr_pos,
@@ -298,7 +305,7 @@ class BoxPlacingCornerEnv(UR5Env):
         gripper_goal = 0.1 < state['gripper_state'][0] < 0.85
         orientation_goal = sum(obs["state"]["tcp_pose"][3:] * self.curr_reset_pose[3:]) ** 2 > 0.85
         self.announced_goals['box_position'] = np.linalg.norm(obs["state"]["boxes"][:3] - goal[:3]) < 0.1
-        # print("box pos: ", obs["state"]["boxes"][:3], "reached?: ", box_positon_goal, "error?: ", np.linalg.norm(obs["state"]["boxes"][:3] - goal[:3]))
+        # print("box pos: ", obs["state"]["boxes"][:3], "reached?: ", self.announced_goals['box_position'], "error?: ", np.linalg.norm(obs["state"]["boxes"][:3] - goal[:3]))
         # print("tcp pos: ", obs["state"]["tcp_pose"][:3])
         # print("force: ", obs["state"]["tcp_force"], "reached?: ", self.announced_goals['forces'])
         # box_orientation_goal = sum(obs["state"]["boxes"][3:] * np.array([0, 0, 1])) ** 2 > 0.9            #this is wrong, it comes as mrp

@@ -92,6 +92,9 @@ class RelativeFrame(gym.Wrapper):
 
         # Reconstruct transformed tcp_pose vector
         p_b_r = T_b_r[:3, 3]
+        p_b_r = self.unwrapped.other_corner_rot @ p_b_r
+        
+        
         theta_b_r = R.from_matrix(T_b_r[:3, :3]).as_quat()
         obs["state"]["tcp_pose"] = np.concatenate((p_b_r, theta_b_r))
         
@@ -100,6 +103,15 @@ class RelativeFrame(gym.Wrapper):
             obs["state"]["boxes"][3:6] = (R.from_matrix(T_b_r[:3, :3]) * R.from_rotvec(obs["state"]["boxes"][3:6])).as_rotvec()
             obs["state"]["trajectory"][:3] = self.rotation_matrix_reset.transpose() @ obs["state"]["trajectory"][:3]
             obs["state"]["trajectory"][3:6] = (R.from_matrix(self.rotation_matrix_reset.transpose()) * R.from_rotvec(obs["state"]["trajectory"][3:6])).as_rotvec()
+        
+        obs["state"]["tcp_vel"][:3] = self.unwrapped.other_corner_rot @ obs["state"]["tcp_vel"][:3]
+        obs["state"]["tcp_vel"][3:6] = self.unwrapped.other_corner_rot @ obs["state"]["tcp_vel"][3:6]
+        obs["state"]["tcp_force"] = self.unwrapped.other_corner_rot @ obs["state"]["tcp_force"]
+        obs["state"]["tcp_torque"] = self.unwrapped.other_corner_rot @ obs["state"]["tcp_torque"]
+        obs["state"]["boxes"][:3] = self.unwrapped.other_corner_rot @ obs["state"]["boxes"][:3]
+        obs["state"]["boxes"][3:6] = self.unwrapped.other_corner_rot @ obs["state"]["boxes"][3:6]
+        obs["state"]["trajectory"][:3] = self.unwrapped.other_corner_rot @ obs["state"]["trajectory"][:3]
+        obs["state"]["trajectory"][3:6] = self.unwrapped.other_corner_rot @ obs["state"]["trajectory"][3:6]
         
         return obs
 

@@ -151,6 +151,7 @@ class UR5Env(gym.Env):
         self.init_box_orientation = np.zeros((3,), dtype=np.float32)
         self._get_goal_position()
         self.rotation_generalization = config.ROTATION_GENERALIZATION
+        self.other_corner_rot = config.OTHER_CORNER_ROT
 
         self.gripper_state = np.zeros((2,), dtype=np.float32)
         self.random_reset = config.RANDOM_RESET

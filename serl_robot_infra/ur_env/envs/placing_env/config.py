@@ -6,9 +6,10 @@ class UR5PlacingCornerConfig(DefaultEnvConfig):
     # RESET_Q = np.array([[1.34231, -1.24585, 1.94961, -2.27267, -1.56428, -0.22641]])   # original one
     # RESET_Q = np.array([[1.3463, -1.3584,  1.9014, -2.1243, -1.5758, -0.2312]])
     RESET_Q = np.array([
-        [-17.66, -80.24, 124.91, -134.67, -89.81, -28.40],
+        # [-17.66, -80.24, 124.91, -134.67, -89.81, -28.40],
         # [-5, -78.62, 122.84, -134.22, -89.81, -13.03],
         # [10, -75.62, 122.84, -134.22, -89.81, -13.03],
+        [-17.35, -88.68, 134.62, -135.93, -89.83, -28.07]
     ])
     RESET_Q = np.deg2rad(RESET_Q)
     RANDOM_RESET = False
@@ -29,13 +30,17 @@ class UR5PlacingCornerConfig(DefaultEnvConfig):
     FORCEMODE_SELECTION_VECTOR = np.ones(6, dtype=np.int8)
     FORCEMODE_LIMITS = np.array([0.5, 0.5, 0.5, 1., 1., 1.])
 
-    GOAL_POSITION = np.array([-0.4, 0.1, -0.04])    #box_1
+    # GOAL_POSITION = np.array([-0.4, 0.1, -0.04])    #box_1
     # GOAL_POSITION = np.array([-0.38, -0.01, -0.04])    #box_1 next to box_3
     # GOAL_POSITION = np.array([-0.38, -0.12, -0.04])    #box_5 next to box_1
     
+    OTHER_CORNER_ROT = R.from_euler("xyz", np.array([0, 0, -np.pi])).as_matrix()
+    GOAL_POSITION = np.array([-0.57, -0.1, -0.04])    #box_1 other corner
+    
     TARGET_ORIENTATION = np.array([-2.2, -2.22, 0]) #as exponential coordinates aka rotation vector
-    ROTATION_GENERALIZATION = R.from_euler("xyz", np.array([0, 0, -np.pi])).as_matrix() # rotation applied to the box to bring it back to the training orientation
-    BOX_ERROR = np.array([0.03, 0.01, -0.03])
+    ROTATION_GENERALIZATION = R.from_euler("xyz", np.array([0, 0, 0])).as_matrix() # rotation applied to the box to bring it back to the training orientation
+    # BOX_ERROR = np.array([0.03, 0.01, -0.03])
+    BOX_ERROR = np.array([-0.0, -0.0, -0.03])
     POSE_ESTIMATION = True
     POSE_ESTIMATION_IP = "ws://localhost:7777"
     WF_rot = np.array([[-1,  0,  0],
