@@ -1,1 +1,2 @@
 from ur_env.envs.placing_env.box_placing_env import BoxPlacingCornerEnv
+from ur_env.envs.placing_env.box_placing_vertical_env import BoxPlacingVerticalEnv

@@ -4,7 +4,7 @@ python sac_policy.py "$@" \
     --actor \
     --env box_placing_corner_env \
     --wandb_project box_placing_sac \
-    --exp_name=sac_drq_policy_evaluation \
+    --exp_name=sac_corner_policy_evaluation \
     --eval_checkpoint_path "checkpoints 0218-19:46" \
     --eval_checkpoint_step 23000 \
     --eval_n_trajs 10 \

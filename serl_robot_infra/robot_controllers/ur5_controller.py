@@ -423,7 +423,7 @@ class UrImpedanceController(threading.Thread):
 
             # move to real home
             pi = 3.1415
-            reset_Q = np.deg2rad([-17.66, -80.24, 124.91, -134.67, -89.81, -28.40])
+            reset_Q = np.deg2rad([3.44, -89.68, 124.27, -123.10, -90.21, -7.46])
             self.ur_control.moveJ(reset_Q, speed=1., acceleration=0.8)
 
             # terminate

@@ -27,9 +27,7 @@ async def read_vision_from_server_main():
             #                         [ 0, -1,  0]]) @ np.array(box_position)
             # print(f"rotated frame {box_position}")
             # send message to mantain the connection alive
-            print( message['space'][0]['boxes'][
-                                    list(message['space'][0]['boxes'].keys())[0]
-                                ]['world2box']['rot'])
+            print(message['space'][0]['boxes']["box_1"]['world2box']['pos'])
             await websocket.send("a")
 
             # if len(messages) < 500:
@@ -169,10 +167,10 @@ class BoxPoseEstimation:
                             # Safely update the message with a lock
                             with self.state_lock:
                                 self.pos = message['space'][0]['boxes'][
-                                    list(message['space'][0]['boxes'].keys())[0]
+                                    "box_1"
                                 ]['world2box']['pos']
                                 self.orient = message['space'][0]['boxes'][
-                                    list(message['space'][0]['boxes'].keys())[0]
+                                    "box_1"
                                 ]['world2box']['rot']
                         except TimeoutError:
                             # print("Timeout error, continuing...")

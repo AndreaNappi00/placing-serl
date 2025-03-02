@@ -2,8 +2,8 @@ export XLA_PYTHON_CLIENT_PREALLOCATE=false && \
 export XLA_PYTHON_CLIENT_MEM_FRACTION=.3 && \
 python sac_policy_hil.py "$@" \
     --actor \
-    --env box_placing_corner_env \
-    --exp_name=sac_hil_corner_policy \
+    --env box_placing_vertical_env \
+    --exp_name=sac_hil_vertical_policy \
     --max_traj_length 150 \
     --seed 42 \
     --max_steps 10000 \

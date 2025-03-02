@@ -3,7 +3,7 @@ export XLA_PYTHON_CLIENT_MEM_FRACTION=.3 && \
 python sac_policy_hil.py "$@" \
     --learner \
     --env box_placing_corner_env \
-    --exp_name=sac_drq_policy \
+    --exp_name=sac_hil_corner_policy \
     --max_traj_length 150 \
     --seed 42 \
     --utd_ratio 8 \

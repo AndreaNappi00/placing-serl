@@ -14,6 +14,12 @@ register(
 )
 
 register(
+    id="box_placing_vertical_env",
+    entry_point="ur_env.envs.placing_env:BoxPlacingVerticalEnv",
+    max_episode_steps=500,
+)
+
+register(
     id="box_picking_camera_env",
     entry_point="ur_env.envs.camera_env:UR5CameraEnv",
     max_episode_steps=100,
