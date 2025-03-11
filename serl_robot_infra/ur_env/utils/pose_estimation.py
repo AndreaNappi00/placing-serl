@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from functools import wraps
 from datetime import datetime
+from scipy.spatial.transform import Rotation as R
 
 
 
@@ -27,7 +28,13 @@ async def read_vision_from_server_main():
             #                         [ 0, -1,  0]]) @ np.array(box_position)
             # print(f"rotated frame {box_position}")
             # send message to mantain the connection alive
-            print(message['space'][0]['boxes']["box_1"]['world2box']['pos'])
+            WF_rot = np.array([[-1,  0,  0],
+                        [ 0,  0, 1],
+                        [ 0, 1,  0]], dtype=np.float32)
+            WF_rot = R.from_matrix(WF_rot)
+            box_position = message['space'][0]['boxes']["box_4"]['world2box']['pos']
+            box_position = WF_rot.apply(box_position)
+            print(box_position)
             await websocket.send("a")
 
             # if len(messages) < 500:
@@ -112,6 +119,8 @@ class BoxPoseEstimation:
         self.last_heartbeat = None
         self.HEARTBEAT_INTERVAL = 30  # seconds
         self.MAX_RECONNECT_ATTEMPTS = 3
+        
+        self.sizes = {"box_1": 0.1, "box_4": 0.13}
     
     def _run_async_loop(self):
         """Run the async event loop in a separate thread"""
@@ -145,6 +154,7 @@ class BoxPoseEstimation:
         Async function to read data from the server containing box pose
         """
         reconnect_attempts = 0
+        box_name = ["box_1", "box_4"]
         
         while not self.stop_event.is_set():
             try:
@@ -165,13 +175,13 @@ class BoxPoseEstimation:
                         
                             # print("Message received")
                             # Safely update the message with a lock
-                            with self.state_lock:
-                                self.pos = message['space'][0]['boxes'][
-                                    "box_1"
-                                ]['world2box']['pos']
-                                self.orient = message['space'][0]['boxes'][
-                                    "box_1"
-                                ]['world2box']['rot']
+                            for key in message['space'][0]['boxes'].keys():
+                                if key in box_name:
+                                    with self.state_lock:
+                                        self.size = self.sizes[key]
+                                        self.pos = message['space'][0]['boxes'][key]['world2box']['pos']
+                                        self.orient = message['space'][0]['boxes'][key]['world2box']['rot']
+                                    break
                         except TimeoutError:
                             # print("Timeout error, continuing...")
                             self.last_heartbeat = None
@@ -200,6 +210,13 @@ class BoxPoseEstimation:
         """
         with self.state_lock:
             return np.array(self.orient)
+    
+    def get_box_size(self):
+        """
+        Thread-safe method to get the current box size
+        """
+        with self.state_lock:
+            return self.size
     
     def stop(self):
         """

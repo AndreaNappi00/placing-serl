@@ -10,7 +10,7 @@ python sac_policy_hil.py "$@" \
     --batch_size 2048 \
     --max_steps 50000 \
     --reward_scale 1 \
-    --demo_paths "demos/ur5_test_20_demos_2025-02-28_14-58-55.pkl" \
+    --demo_paths "demos/ur5_test_20_demos_2025-03-10_13-28-14.pkl" \
     --eval_checkpoint_step 50000 \
     --load_checkpoint_path "checkpoints" \
     # --debug

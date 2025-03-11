@@ -661,6 +661,9 @@ class UR5Env(gym.Env):
         self.box_orientation = self.box_pose.get_box_orientation()
         self.box_orientation = (R.from_matrix(self.rotation_generalization) * R.from_matrix(self.WF_rot) * R.from_rotvec(self.box_orientation)).as_rotvec()
         
+    def _update_box_size_estimate(self):
+        self.box_size = self.box_pose.get_box_size()
+        
     def _get_goal_position(self):
         """
         Make sure the goal position is the correct one before computing the reward.
