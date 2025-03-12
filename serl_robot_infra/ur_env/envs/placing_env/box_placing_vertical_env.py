@@ -316,6 +316,7 @@ class BoxPlacingVerticalEnv(UR5Env):
         orientation_goal = sum(obs["state"]["tcp_pose"][3:] * self.curr_reset_pose[3:]) ** 2 > 0.85
         angle_diff = R.from_rotvec(obs["state"]["boxes"][3:]).as_quat() * R.from_rotvec(self.target_orientation).as_quat()
         # print("box pos: ", obs["state"]["boxes"][:3], "reached?: ", self.announced_goals['box_pose'], "error?: ", np.linalg.norm(obs["state"]["boxes"][:3] - goal[:3]))
+        # print("box orientation: ", obs["state"]["boxes"][3:] )
         # print("tcp pos: ", obs["state"]["tcp_pose"][:3])
         # print("force: ", obs["state"]["tcp_force"], "reached?: ", self.announced_goals['forces'])
         # box_orientation_goal = sum(obs["state"]["boxes"][3:] * np.array([0, 0, 1])) ** 2 > 0.9            #this is wrong, it comes as mrp

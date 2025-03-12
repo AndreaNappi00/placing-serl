@@ -3,9 +3,13 @@ import gymnasium as gym
 import numpy as np
 from gym import Env
 from franka_env.utils.transformations import (
+    construct_adjoint_matrix,
+    construct_adjoint_matrix_inverse,
     construct_homogeneous_matrix,
     construct_rotation_matrix,
-    construct_homogenous_vector
+    construct_homogenous_vector,
+    invert_homogeneous_matrix,
+    rotate_rotvec
 )
 
 from ur_env.envs.placing_env.config import UR5PlacingCornerConfig
@@ -22,10 +26,12 @@ class RelativeFrame(gym.Wrapper):
         "state": spaces.Dict(
             {
                 "tcp_pose": spaces.Box(-np.inf, np.inf, shape=(7,)), # xyz + quat
-                "tcp_vel": spaces.Box(-np.inf, np.inf, shape=(6,)),
-                "tcp_force": spaces.Box(-np.inf, np.inf, shape=(3,)),
-                "tcp_torque": spaces.Box(-np.inf, np.inf, shape=(3,)),
+                "tcp_vel": spaces.Box(-np.inf, np.inf, shape=(6,)), # xyz + rotvec
+                "tcp_force": spaces.Box(-np.inf, np.inf, shape=(3,)), # xyz
+                "tcp_torque": spaces.Box(-np.inf, np.inf, shape=(3,)), # xyz
                 "gripper_state": spaces.Box(-np.inf, np.inf, shape=(2,)),
+                "boxes": spaces.Box(-np.inf, np.inf, shape=(6,)), # xyz + rotvec
+                "trajectory": spaces.Box(-np.inf, np.inf, shape=(6,)), # xyz + rotvec
             }
         ),
         ......
@@ -39,13 +45,12 @@ class RelativeFrame(gym.Wrapper):
         self.rotation_matrix_reset = np.eye((3))
 
         # Homogeneous transformation matrix from reset pose's relative frame to base frame
-        self.T_r_o_inv = np.zeros((4, 4))
+        self.T_r_o = np.zeros((4, 4))
 
     def step(self, action: np.ndarray):
         # action is assumed to be (x, y, z, rx, ry, rz, gripper)
         # Transform action from end-effector frame to base frame
         transformed_action = self.transform_action(action)
-
         obs, reward, done, truncated, info = self.env.step(transformed_action)
 
         # this is to convert the spacemouse intervention action
@@ -66,9 +71,10 @@ class RelativeFrame(gym.Wrapper):
 
         self.rotation_matrix = construct_rotation_matrix(obs["state"]["tcp_pose"])
         self.rotation_matrix_reset = self.rotation_matrix.copy()
+        self.adjoint_reset = construct_adjoint_matrix(obs["state"]["tcp_pose"])
         
         # Update transformation matrix from the reset pose's relative frame to base frame
-        self.T_r_o_inv = np.linalg.inv(
+        self.T_r_o = np.linalg.inv(
             construct_homogeneous_matrix(obs["state"]["tcp_pose"])
         )
 
@@ -79,27 +85,35 @@ class RelativeFrame(gym.Wrapper):
         """
         Transform observations from spatial(base) frame into body(end-effector) frame
         using the rotation and homogeneous matrix
-        
-        rotation_matrix_reset and rotation_matrix are the same?
         """
-        obs["state"]["tcp_vel"][:3] = self.rotation_matrix_reset.transpose() @ obs["state"]["tcp_vel"][:3]
-        obs["state"]["tcp_vel"][3:6] = self.rotation_matrix_reset.transpose() @ obs["state"]["tcp_vel"][3:6]
-        obs["state"]["tcp_force"] = self.rotation_matrix.transpose() @ obs["state"]["tcp_force"]
-        obs["state"]["tcp_torque"] = self.rotation_matrix.transpose() @ obs["state"]["tcp_torque"]
+        
+        A_b_ee = construct_adjoint_matrix(obs["state"]["tcp_pose"])
+        twist_b = np.concatenate((obs["state"]["tcp_vel"][3:6], obs["state"]["tcp_vel"][:3]))
+        twist_ee = A_b_ee @ twist_b
+        obs["state"]["tcp_vel"] = np.concatenate([twist_ee[3:6], twist_ee[:3]])
+        
+        A_b_ee_inv = construct_adjoint_matrix_inverse(obs["state"]["tcp_pose"])
+        wrench_b = np.concatenate((obs["state"]["tcp_torque"], obs["state"]["tcp_force"]))
+        wrench_ee = A_b_ee_inv.T @ wrench_b
+        obs["state"]["tcp_torque"] = wrench_ee[:3]
+        obs["state"]["tcp_force"] = wrench_ee[3:]
             
-        T_b_o = construct_homogeneous_matrix(obs["state"]["tcp_pose"])
-        T_b_r = self.T_r_o_inv @ T_b_o
+        T_o_ee = construct_homogeneous_matrix(obs["state"]["tcp_pose"])
+        T_r_ee = self.T_r_o @ T_o_ee
+        T_ee_o = invert_homogeneous_matrix(T_o_ee)
 
         # Reconstruct transformed tcp_pose vector
-        p_b_r = T_b_r[:3, 3]
-        theta_b_r = R.from_matrix(T_b_r[:3, :3]).as_quat()
-        obs["state"]["tcp_pose"] = np.concatenate((p_b_r, theta_b_r))
+        p_r_ee = T_r_ee[:3, 3]
+        theta_r_ee = R.from_matrix(T_r_ee[:3, :3]).as_quat()
+        obs["state"]["tcp_pose"] = np.concatenate((p_r_ee, theta_r_ee))
         
         if self.config.POSE_ESTIMATION:
-            obs["state"]["boxes"][:3] = (self.T_r_o_inv @ construct_homogenous_vector(obs["state"]["boxes"][:3]))[:3]
-            obs["state"]["boxes"][3:6] = (R.from_matrix(T_b_r[:3, :3]) * R.from_rotvec(obs["state"]["boxes"][3:6])).as_rotvec()
-            obs["state"]["trajectory"][:3] = self.rotation_matrix_reset.transpose() @ obs["state"]["trajectory"][:3]
-            obs["state"]["trajectory"][3:6] = (R.from_matrix(self.rotation_matrix_reset.transpose()) * R.from_rotvec(obs["state"]["trajectory"][3:6])).as_rotvec()
+            obs["state"]["boxes"][:3] = (T_ee_o @ construct_homogenous_vector(obs["state"]["boxes"][:3]))[:3]
+            obs["state"]["boxes"][3:6] = (R.from_matrix(T_ee_o[:3, :3]) * R.from_rotvec(obs["state"]["boxes"][3:6])).as_rotvec()
+            
+            twist_traj_b = np.concatenate((obs["state"]["trajectory"][3:6], obs["state"]["trajectory"][:3]))
+            twist_traj_ee = A_b_ee @ twist_traj_b
+            obs["state"]["trajectory"] = np.concatenate([twist_traj_ee[3:6], twist_traj_ee[:3]])
         
         return obs
 
@@ -109,8 +123,10 @@ class RelativeFrame(gym.Wrapper):
         using the rotation matrix
         """
         action = np.array(action)  # in case action is a jax read-only array
-        action[:3] = self.rotation_matrix_reset @ action[:3]
-        action[3:6] = self.rotation_matrix_reset @ action[3:6]
+        vacuum_action = action[-1]
+        action = np.concatenate((action[3:6], action[:3]))
+        action = self.adjoint_reset @ action
+        action = np.concatenate((action[3:6], action[:3], [vacuum_action]))
         return action
 
     def transform_action_inv(self, action: np.ndarray):
@@ -118,7 +134,9 @@ class RelativeFrame(gym.Wrapper):
         Transform action from spatial(base) frame into body(end-effector) frame
         using the rotation matrix.
         """
-        action = np.array(action)
-        action[:3] = self.rotation_matrix_reset.transpose() @ action[:3]
-        action[3:6] = self.rotation_matrix_reset.transpose() @ action[3:6]
+        action = np.array(action)  # in case action is a jax read-only array
+        vacuum_action = action[-1]
+        action = np.concatenate((action[3:6], action[:3]))
+        action = np.linalg.inv(self.adjoint_reset) @ action
+        action = np.concatenate((action[3:6], action[:3], [vacuum_action]))
         return action

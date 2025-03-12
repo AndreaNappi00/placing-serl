@@ -75,7 +75,8 @@ class UR5PlacingVerticalConfig(DefaultEnvConfig):
     # GOAL_POSITION = np.array([-0.38, -0.01, -0.04])    #box_1 next to box_3
     # GOAL_POSITION = np.array([-0.38, -0.12, -0.04])    #box_5 next to box_1
     
-    TARGET_ORIENTATION = np.array([-1.1789, -1.2571, -1.1951]) #as exponential coordinates aka rotation vector
+    TARGET_ORIENTATION = np.array([-1.2, -1.25, -1.2]) #as exponential coordinates aka rotation vector
+    # TARGET_ORIENTATION = np.array([1.32, -1.31, 1.14]) #as exponential coordinates aka rotation vector
     ROTATION_GENERALIZATION = R.from_euler("xyz", np.array([0, 0, 0])).as_matrix() # rotation applied to the box to bring it back to the training orientation
     BOX_ERROR = np.array([0.0, 0.0, 0.0])
     POSE_ESTIMATION = True
