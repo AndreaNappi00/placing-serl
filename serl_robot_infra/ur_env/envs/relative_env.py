@@ -41,8 +41,6 @@ class RelativeFrame(gym.Wrapper):
     def __init__(self, env: Env):
         super().__init__(env)
         self.config = UR5PlacingCornerConfig
-        self.rotation_matrix = np.eye((3))
-        self.rotation_matrix_reset = np.eye((3))
 
         # Homogeneous transformation matrix from reset pose's relative frame to base frame
         self.T_r_o = np.zeros((4, 4))
@@ -50,18 +48,23 @@ class RelativeFrame(gym.Wrapper):
     def step(self, action: np.ndarray):
         # action is assumed to be (x, y, z, rx, ry, rz, gripper)
         # Transform action from end-effector frame to base frame
-        transformed_action = self.transform_action(action)
-        obs, reward, done, truncated, info = self.env.step(transformed_action)
+        # print("action", action)
+        transformed_action = self.transform_action(action) #action in network will be in base frame!!!!????
+        # print("transformed_action", transformed_action)
+        obs, reward, done, truncated, info = self.env.step(transformed_action) #go deeper, to spacemouse env or ur5 env
 
         # this is to convert the spacemouse intervention action
         if "intervene_action" in info:
+            # print("intervene_action", self.transform_action_inv(info["intervene_action"]))
             info["intervene_action"] = self.transform_action_inv(info["intervene_action"])
+            # print("intervene_action transformed", info["intervene_action"])
 
         # Update rotation matrix
-        self.rotation_matrix = construct_rotation_matrix(obs["state"]["tcp_pose"])
+        self.adjoint_matrix = construct_adjoint_matrix(obs["state"]["tcp_pose"])
 
         # Transform observation to spatial frame
         transformed_obs = self.transform_observation(obs)
+        # print("action", transformed_obs["state"]["action"])
         return transformed_obs, reward, done, truncated, info
 
     def reset(self, **kwargs):
@@ -69,9 +72,7 @@ class RelativeFrame(gym.Wrapper):
 
         # obs['state']['tcp_pose'][:2] -= info['reset_shift']  # set rel pose to original reset pose (no random)
 
-        self.rotation_matrix = construct_rotation_matrix(obs["state"]["tcp_pose"])
-        self.rotation_matrix_reset = self.rotation_matrix.copy()
-        self.adjoint_reset = construct_adjoint_matrix(obs["state"]["tcp_pose"])
+        self.adjoint_matrix = construct_adjoint_matrix(obs["state"]["tcp_pose"])
         
         # Update transformation matrix from the reset pose's relative frame to base frame
         self.T_r_o = np.linalg.inv(
@@ -87,16 +88,14 @@ class RelativeFrame(gym.Wrapper):
         using the rotation and homogeneous matrix
         """
         
-        A_b_ee = construct_adjoint_matrix(obs["state"]["tcp_pose"])
-        twist_b = np.concatenate((obs["state"]["tcp_vel"][3:6], obs["state"]["tcp_vel"][:3]))
-        twist_ee = A_b_ee @ twist_b
-        obs["state"]["tcp_vel"] = np.concatenate([twist_ee[3:6], twist_ee[:3]])
+        A_b_ee = self.adjoint_matrix
+        # A_b_ee_inv = np.linalg.inv(A_b_ee)
+        obs["state"]["tcp_vel"] = A_b_ee @ obs["state"]["tcp_vel"]
         
-        A_b_ee_inv = construct_adjoint_matrix_inverse(obs["state"]["tcp_pose"])
-        wrench_b = np.concatenate((obs["state"]["tcp_torque"], obs["state"]["tcp_force"]))
-        wrench_ee = A_b_ee_inv.T @ wrench_b
-        obs["state"]["tcp_torque"] = wrench_ee[:3]
-        obs["state"]["tcp_force"] = wrench_ee[3:]
+        wrench_b = np.concatenate((obs["state"]["tcp_force"], obs["state"]["tcp_torque"]))
+        wrench_ee = A_b_ee.T @ wrench_b
+        obs["state"]["tcp_force"] = wrench_ee[:3]
+        obs["state"]["tcp_torque"] = wrench_ee[3:]
             
         T_o_ee = construct_homogeneous_matrix(obs["state"]["tcp_pose"])
         T_r_ee = self.T_r_o @ T_o_ee
@@ -107,14 +106,14 @@ class RelativeFrame(gym.Wrapper):
         theta_r_ee = R.from_matrix(T_r_ee[:3, :3]).as_quat()
         obs["state"]["tcp_pose"] = np.concatenate((p_r_ee, theta_r_ee))
         
+        
+        obs["state"]["action"][:6] = self.transform_action_inv(obs["state"]["action"][:6])
+        
         if self.config.POSE_ESTIMATION:
             obs["state"]["boxes"][:3] = (T_ee_o @ construct_homogenous_vector(obs["state"]["boxes"][:3]))[:3]
             obs["state"]["boxes"][3:6] = (R.from_matrix(T_ee_o[:3, :3]) * R.from_rotvec(obs["state"]["boxes"][3:6])).as_rotvec()
             
-            twist_traj_b = np.concatenate((obs["state"]["trajectory"][3:6], obs["state"]["trajectory"][:3]))
-            twist_traj_ee = A_b_ee @ twist_traj_b
-            obs["state"]["trajectory"] = np.concatenate([twist_traj_ee[3:6], twist_traj_ee[:3]])
-        
+            obs["state"]["trajectory"] = A_b_ee @ obs["state"]["trajectory"]
         return obs
 
     def transform_action(self, action: np.ndarray):
@@ -123,10 +122,7 @@ class RelativeFrame(gym.Wrapper):
         using the rotation matrix
         """
         action = np.array(action)  # in case action is a jax read-only array
-        vacuum_action = action[-1]
-        action = np.concatenate((action[3:6], action[:3]))
-        action = self.adjoint_reset @ action
-        action = np.concatenate((action[3:6], action[:3], [vacuum_action]))
+        action[:6] = np.linalg.inv(self.adjoint_matrix) @ action[:6]
         return action
 
     def transform_action_inv(self, action: np.ndarray):
@@ -135,8 +131,5 @@ class RelativeFrame(gym.Wrapper):
         using the rotation matrix.
         """
         action = np.array(action)  # in case action is a jax read-only array
-        vacuum_action = action[-1]
-        action = np.concatenate((action[3:6], action[:3]))
-        action = np.linalg.inv(self.adjoint_reset) @ action
-        action = np.concatenate((action[3:6], action[:3], [vacuum_action]))
+        action[:6] = self.adjoint_matrix @ action[:6]
         return action

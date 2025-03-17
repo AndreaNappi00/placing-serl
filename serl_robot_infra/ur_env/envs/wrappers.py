@@ -6,7 +6,7 @@ from ur_env.spacemouse.spacemouse_expert import SpaceMouseExpert
 import time
 from scipy.spatial.transform import Rotation as R
 
-from ur_env.utils.rotations import quat_2_euler, quat_2_mrp
+from ur_env.utils.rotations import quat_2_euler, quat_2_mrp, quat_2_rotvec
 
 from ur_env.utils.vacuum_gripper import VacuumGripper
 
@@ -287,7 +287,7 @@ class SpacemouseIntervention(gym.ActionWrapper):
         self.left = np.array([False] * gripper_action_span, dtype=np.bool_)
         self.right = self.left.copy()
 
-        self.invert_axes = [-1, -1, 1, -1, -1, 1]
+        self.invert_axes = [1, 1, 1, 1, 1, 1]
         self.deadspace = 0.15
         
         self.env.unwrapped.residual_learning_inference = False
@@ -339,11 +339,11 @@ class SpacemouseIntervention(gym.ActionWrapper):
         - expert_a: spacemouse output adapted to force space (action)
         """
 
-        # position = super().get_wrapper_attr("curr_pos")  # get position from ur_env
-        position = self.unwrapped.curr_pos
-        z_angle = np.arctan2(position[1], position[0])  # get first joint angle
+        position = super().get_wrapper_attr("curr_pos")  # get position from ur_env
+        # position = self.unwrapped.curr_pos
+        # z_angle = np.arctan2(position[1], position[0])  # get first joint angle
 
-        z_rot = R.from_rotvec(np.array([0, 0, z_angle]))
+        z_rot = R.from_rotvec(np.array([0, 0, -np.pi]))
         action[:6] *= self.invert_axes  # if some want to be inverted
         action[:3] = z_rot.apply(action[:3])  # z rotation invariant translation
 
@@ -409,6 +409,26 @@ class Quat2MrpWrapper(gym.ObservationWrapper):
         tcp_pose = observation["state"]["tcp_pose"]
         observation["state"]["tcp_pose"] = np.concatenate(
             (tcp_pose[:3], quat_2_mrp(tcp_pose[3:]))
+        )
+        return observation
+
+class Quat2rotvecWrapper(gym.ObservationWrapper):
+    """
+    Convert the quaternion representation of the tcp pose to rotvec
+    """
+
+    def __init__(self, env: gym.Env):
+        super().__init__(env)
+        # from xyz + quat to xyz + euler
+        self.observation_space["state"]["tcp_pose"] = gym.spaces.Box(
+            -np.inf, np.inf, shape=(6,)
+        )
+
+    def observation(self, observation):
+        # convert tcp pose from quat to euler
+        tcp_pose = observation["state"]["tcp_pose"]
+        observation["state"]["tcp_pose"] = np.concatenate(
+            (tcp_pose[:3], quat_2_rotvec(tcp_pose[3:]))
         )
         return observation
 

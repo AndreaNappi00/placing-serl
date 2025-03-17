@@ -10,7 +10,7 @@ from pprint import pprint
 from pynput import keyboard
 from colorama import Fore, Style
 
-from ur_env.envs.wrappers import SpacemouseIntervention, Quat2MrpWrapper, InterruptActionWrapper
+from ur_env.envs.wrappers import SpacemouseIntervention, Quat2rotvecWrapper, InterruptActionWrapper
 from serl_launcher.wrappers.serl_obs_wrappers import SerlObsWrapperNoImages, SerlObsWrapperTrajBox, ScaleObservationWrapper
 from serl_launcher.wrappers.chunking import ChunkingWrapper
 
@@ -36,7 +36,7 @@ if __name__ == "__main__":
     env = gym.make("box_placing_vertical_env")
     env = SpacemouseIntervention(env)
     env = RelativeFrame(env)
-    env = Quat2MrpWrapper(env)
+    env = Quat2rotvecWrapper(env)
     env = ScaleObservationWrapper(env)
     env = SerlObsWrapperTrajBox(env)
     env = InterruptActionWrapper(env)
