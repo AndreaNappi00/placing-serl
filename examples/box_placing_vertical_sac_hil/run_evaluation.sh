@@ -6,8 +6,8 @@ python sac_policy_hil.py "$@" \
     --max_traj_length 200 \
     --wandb_project box_placing_vertical_sac \
     --exp_name=sac_hil_vertical_policy_evaluation \
-    --eval_checkpoint_path "checkpoints 0317-11:12" \
-    --eval_checkpoint_step 24000 \
+    --eval_checkpoint_path "checkpoints 0318-17:46" \
+    --eval_checkpoint_step 33000 \
     --eval_n_trajs 10 \
     --evaluation \
     --debug

@@ -48,7 +48,7 @@ class UR5PlacingVerticalConfig(DefaultEnvConfig):
     # RESET_Q = np.array([[1.34231, -1.24585, 1.94961, -2.27267, -1.56428, -0.22641]])   # original one
     # RESET_Q = np.array([[1.3463, -1.3584,  1.9014, -2.1243, -1.5758, -0.2312]])
     RESET_Q = np.array([
-        [-31.34, -83.74, 113.38, -119.53, -89.78, -31.44], #-31.44
+        [-28.84, -80.1, 110.96, -120.75, -89.77, -28.93], #-28.93
         # [-5, -78.62, 122.84, -134.22, -89.81, -13.03],
         # [10, -75.62, 122.84, -134.22, -89.81, -13.03],
     ])
@@ -73,7 +73,7 @@ class UR5PlacingVerticalConfig(DefaultEnvConfig):
     FORCEMODE_SELECTION_VECTOR = np.ones(6, dtype=np.int8)
     FORCEMODE_LIMITS = np.array([0.5, 0.5, 0.5, 1., 1., 1.])
 
-    GOAL_POSITION = np.array([-0.5, 0.143, -0.0253])    #box_1
+    GOAL_POSITION = np.array([-0.51, 0.1345, -0.023])    #box_1
     # GOAL_POSITION = np.array([-0.38, -0.01, -0.04])    #box_1 next to box_3
     # GOAL_POSITION = np.array([-0.38, -0.12, -0.04])    #box_5 next to box_1
     

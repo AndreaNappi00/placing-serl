@@ -112,7 +112,6 @@ class RelativeFrame(gym.Wrapper):
         if self.config.POSE_ESTIMATION:
             obs["state"]["boxes"][:3] = (T_ee_o @ construct_homogenous_vector(obs["state"]["boxes"][:3]))[:3]
             obs["state"]["boxes"][3:6] = (R.from_matrix(T_ee_o[:3, :3]) * R.from_rotvec(obs["state"]["boxes"][3:6])).as_rotvec()
-            
             obs["state"]["trajectory"] = A_b_ee @ obs["state"]["trajectory"]
         return obs
 

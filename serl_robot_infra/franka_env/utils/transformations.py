@@ -28,6 +28,8 @@ def construct_adjoint_matrix(tcp_pose):
     adjoint_matrix[:3, :3] = rotation
     adjoint_matrix[3:, 3:] = rotation
     adjoint_matrix[:3, 3:] = skew_matrix @ rotation
+    if np.linalg.det(adjoint_matrix) < 0.1:
+        print("Determinant of adjoint matrix is too low")
     return adjoint_matrix
 
 def construct_adjoint_matrix_inverse(tcp_pose):

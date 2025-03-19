@@ -6,12 +6,13 @@ python sac_policy_hil.py "$@" \
     --exp_name=sac_hil_vertical_policy \
     --max_traj_length 150 \
     --seed 42 \
-    --utd_ratio 8 \
+    --utd_ratio 5 \
     --batch_size 2048 \
     --max_steps 50000 \
     --reward_scale 1 \
-    --demo_paths "demos/ur5_test_20_demos_2025-03-17_10-55-09.pkl" \
-    --eval_checkpoint_step 50000 \
-    --load_checkpoint_path "checkpoints" \
+    --demo_paths "demos/ur5_test_20_demos_2025-03-18_14-02-51.pkl" \
+    --eval_checkpoint_step 0 \
+    --load_checkpoint_path "checkpoints 0318-14:16" \
     # --debug
 #    --preload_rlds_path "/home/amdrea/Code/voxel-serl/examples/box_picking_sac/rlds" \
+ 
