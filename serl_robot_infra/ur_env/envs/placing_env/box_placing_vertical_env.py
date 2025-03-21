@@ -9,6 +9,7 @@ import warnings
 from ur_env.envs.ur5_env import UR5Env
 from ur_env.envs.placing_env.config import UR5PlacingVerticalConfig
 
+from franka_env.utils.transformations import construct_homogeneous_matrix, construct_homogeneous_vector
 
 # used for float value comparisons (pressure of vacuum-gripper)
 def is_close(value, target):
@@ -41,7 +42,7 @@ class BoxPlacingVerticalEnv(UR5Env):
         self.force_tolerance = 3
         self.angle_tolerance = np.pi/3*2
         self.trajectory_dir = np.zeros(6)
-
+        
     def reset(self, **kwargs):
 
         self.last_action[:] = 0.
@@ -65,27 +66,27 @@ class BoxPlacingVerticalEnv(UR5Env):
 
     def _update_trajectory_dir(self):
         scaling = 4
-        if self.announced_goals['box_pose'] and not self.gripper_state[1]: #move up slowly
+        T_o_r = construct_homogeneous_matrix(self.curr_reset_pose)
+        T_r_goal = construct_homogeneous_matrix(self.goal_pose)
+        T_o_goal =  T_o_r @ T_r_goal
+        goal_pose_o = np.concatenate([T_o_goal[:3, 3], R.from_matrix(T_o_goal[:3, :3]).as_rotvec()])
+        
+        if 'box_pose' in self.cost_infos and self.cost_infos['box_pose'] and not self.gripper_state[1]: #move up slowly
             self.trajectory_dir[:3] = np.array([0., 0., 1.]) * (1/scaling)
         elif self.gripper_state[0]:   # go to goal
+            
             horizontal_total = 0.1
-            horizontal_distance = np.linalg.norm(self.goal_position[:2] - self.box_position[:2])
+            horizontal_distance = np.linalg.norm(goal_pose_o[:2] - self.box_position[:2])
             s = np.clip(1 - horizontal_distance / horizontal_total, 0, 1) if horizontal_total > 0 else 0
 
             H = 0.03  # maximum additional height
             parabolic_offset = 4 * H * s * (1 - s)
 
-            traj = self.goal_position - self.curr_pos[:3]
-            traj[2] = 0.05 * (self.goal_position[2] - self.curr_pos[2]) + parabolic_offset
+            traj = goal_pose_o[:3] - self.curr_pos[:3]
+            traj[2] = 0.05 * (goal_pose_o[2] - self.curr_pos[2]) + parabolic_offset
 
             self.trajectory_dir[:3] = traj / (np.linalg.norm(traj) * scaling)
         else:   # box dropped # go to box
-            # target_picking = self.box_position + self.box_error
-            # target_picking[2] = self.goal_position[2] + 0.18 + self.box_size / 2
-            # self.trajectory_dir[:3] = target_picking - self.curr_pos[:3]
-            # self.trajectory_dir[2] += (np.linalg.norm(self.trajectory_dir[:2]) ** 2) * 5
-            # self.trajectory_dir[:3] /= np.linalg.norm(self.trajectory_dir[:3]) * scaling
-
             # It is assumed that self.curr_reset_pose is defined (for instance, saved during reset)
             target_picking = self.box_position + self.box_error
             target_picking[2] += 0.14 + self.box_size / 2
@@ -108,7 +109,7 @@ class BoxPlacingVerticalEnv(UR5Env):
             self.trajectory_dir[:3] = traj / (np.linalg.norm(traj) * scaling)
 
         self.trajectory_dir[3:] = (
-            R.from_rotvec(self.target_orientation) * R.from_rotvec(-self.box_orientation)
+            R.from_rotvec(goal_pose_o[3:]) * R.from_rotvec(-self.box_orientation)
         ).as_rotvec()
 
     def step(self, action: np.ndarray) -> tuple:
@@ -146,13 +147,8 @@ class BoxPlacingVerticalEnv(UR5Env):
         self.curr_path_length += 1
 
         obs = self._get_obs(action)
-
-        reward = self.compute_reward(obs, action)
-        # print("reward: ", reward)
+        
         truncated = self._is_truncated()
-        reward = reward if not truncated else reward - 10.  # truncation penalty
-        # print("truncated reward: ", reward)
-        done = self.curr_path_length >= self.max_episode_length or self.reached_goal_state(obs) or truncated
 
         dt = time.time() - start_time
         to_sleep = max(0, (1.0 / self.hz) - dt)
@@ -160,7 +156,7 @@ class BoxPlacingVerticalEnv(UR5Env):
             warnings.warn(f"environment could not be within {self.hz} Hz, took {dt:.4f}s!")
         time.sleep(to_sleep)
 
-        return obs, reward, done, truncated, self.get_cost_infos(done)
+        return obs, 0, 0, truncated, {}
 
     def _get_obs(self, action) -> dict:
         # get image before state observation, so they match better in time
@@ -189,7 +185,8 @@ class BoxPlacingVerticalEnv(UR5Env):
             "tcp_torque": self.curr_torque,
             "action": action,
             "boxes": np.concatenate([self.box_position, self.box_orientation]), # in robot_base frame
-            "trajectory": self.trajectory_dir
+            "trajectory": self.trajectory_dir,
+            "goal_pose": np.zeros(6)
         }
 
         if images is not None:
@@ -235,8 +232,8 @@ class BoxPlacingVerticalEnv(UR5Env):
 
     def update_box_pose_goal(self, obs):
         angle_diff = (R.from_rotvec(obs["state"]["boxes"][3:]).inv() * R.from_rotvec(self.target_orientation)).magnitude()
-        pos_diff = np.linalg.norm(obs["state"]["boxes"][:2] - self.goal_position[:2])
-        z_diff = np.abs(obs["state"]["boxes"][2] - self.goal_position[2])
+        pos_diff = np.linalg.norm(obs["state"]["boxes"][:2] - self.goal_pose[:2])
+        z_diff = np.abs(obs["state"]["boxes"][2] - self.goal_pose[2])
         gripper_state = obs["state"]["gripper_state"][1]
 
         pose_in_goal = pos_diff < 0.05 and z_diff < 0.04 and angle_diff < 0.15
@@ -295,7 +292,7 @@ class BoxPlacingVerticalEnv(UR5Env):
         orientation_cost = max(angle - 0.005, 0.) * 1.
 
         max_pose_diff = 0.05  # set to 5cm
-        pos_diff = obs["state"]["boxes"][:3] - self.goal_position
+        pos_diff = obs["state"]["boxes"][:3] - self.goal_pose[:3]
         position_cost = 5. * np.sum(
             np.where(np.abs(pos_diff) > max_pose_diff, np.abs(pos_diff - np.sign(pos_diff) * max_pose_diff), 0.0)
         )
@@ -304,7 +301,7 @@ class BoxPlacingVerticalEnv(UR5Env):
         orientation_cost_box = max(orientation_cost_box - 0.005, 0.) * 1.
 
         max_height_diff = 0.05  # set to 10cm
-        height_diff = obs["state"]["tcp_pose"][2] - self.goal_position[2] - 0.18
+        height_diff = obs["state"]["tcp_pose"][2] - self.goal_pose[2] - 0.18
         # position_cost += 10. * height_diff if height_diff > max_height_diff else 0.
 
         force_cost = self.get_force_cost(obs)
@@ -342,7 +339,7 @@ class BoxPlacingVerticalEnv(UR5Env):
 
     def reached_goal_state(self, obs) -> bool:
         state = obs["state"]
-        goal = self.goal_position
+        goal = self.goal_pose[:3]
 
         height_goal = state['tcp_pose'][2] < goal[2] + 0.18
         gripper_goal = 0.1 < state['gripper_state'][0] < 0.85

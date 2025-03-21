@@ -64,9 +64,12 @@ def construct_rotation_matrix(tcp_pose):
 def construct_homogeneous_matrix(tcp_pose):
     """
     Construct the homogeneous transformation matrix from given pose.
-    args: tcp_pose: (x, y, z, qx, qy, qz, qw)
+    args: tcp_pose: (x, y, z, qx, qy, qz, qw) or (x, y, z, rx, ry, rz)
     """
-    rotation = R.from_quat(tcp_pose[3:]).as_matrix()
+    if len(tcp_pose) == 6:
+        rotation = R.from_rotvec(tcp_pose[3:]).as_matrix()
+    else:
+        rotation = R.from_quat(tcp_pose[3:]).as_matrix()
     translation = np.array(tcp_pose[:3])
     T = np.zeros((4, 4))
     T[:3, :3] = rotation
@@ -89,7 +92,7 @@ def invert_homogeneous_matrix(matrix):
     inv_matrix[3, 3] = 1
     return inv_matrix
 
-def construct_homogenous_vector(vector):
+def construct_homogeneous_vector(vector):
     """
     Construct the homogeneous vector from given vector.
     args: vector: (x, y, z)

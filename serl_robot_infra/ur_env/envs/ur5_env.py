@@ -140,16 +140,15 @@ class UR5Env(gym.Env):
         self.WF_rot = config.WF_rot
         self.residual_learning_inference = True
         self.box_error = config.BOX_ERROR
-        self.target_orientation = config.TARGET_ORIENTATION
         self.low_pass_filter_k = config.LOW_PASS_FILTER
         
         # boxes
         self.box_pose = BoxPoseEstimation(self.pose_estimation_ip) if config.POSE_ESTIMATION else None
-        self.goal_position = np.zeros((3,), dtype=np.float32)
+        self.goal_pose = np.zeros((3,), dtype=np.float32)
         self.box_position = np.zeros((3,), dtype=np.float32)
         self.box_orientation = np.zeros((3,), dtype=np.float32)
         self.init_box_orientation = np.zeros((3,), dtype=np.float32)
-        self._get_goal_position()
+        self._get_goal_pose()
         self.rotation_generalization = config.ROTATION_GENERALIZATION
 
         self.gripper_state = np.zeros((2,), dtype=np.float32)
@@ -231,7 +230,8 @@ class UR5Env(gym.Env):
                 "tcp_torque": gym.spaces.Box(-np.inf, np.inf, shape=(3,)),
                 "action": gym.spaces.Box(-1., 1., shape=self.action_space.shape),
                 "boxes": gym.spaces.Box(-np.inf, np.inf, shape=(6,)),
-                "trajectory": gym.spaces.Box(-np.inf, np.inf, shape=(6,))
+                "trajectory": gym.spaces.Box(-np.inf, np.inf, shape=(6,)),
+                "goal_pose": gym.spaces.Box(-np.inf, np.inf, shape=(6,))
             }
         )
 
@@ -664,11 +664,11 @@ class UR5Env(gym.Env):
     def _update_box_size_estimate(self):
         self.box_size = self.box_pose.get_box_size()
         
-    def _get_goal_position(self):
+    def _get_goal_pose(self):
         """
-        Make sure the goal position is the correct one before computing the reward.
+        Make sure the goal pose is the correct one before computing the reward.
         """
-        self.goal_position = self.config.GOAL_POSITION
+        self.goal_pose = self.config.GOAL_POSE
 
     def _update_currpos(self):
         """

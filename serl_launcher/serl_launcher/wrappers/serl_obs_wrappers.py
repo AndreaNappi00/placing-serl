@@ -97,5 +97,7 @@ class ScaleObservationWrapper(gym.ObservationWrapper):
         obs["state"]["boxes"][3:] *= self.rotation_scale
         obs["state"]["trajectory"][:3] *= self.translation_scale
         obs["state"]["trajectory"][3:] *= self.rotation_scale
+        obs["state"]["goal_pose"][:3] *= self.translation_scale
+        obs["state"]["goal_pose"][3:] *= self.rotation_scale
         
         return obs

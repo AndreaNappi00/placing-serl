@@ -8,8 +8,9 @@ python sac_policy_hil.py "$@" \
     --seed 42 \
     --max_steps 10000 \
     --random_steps 0 \
-    --utd_ratio 5 \
+    --utd_ratio 8 \
     --batch_size 2048 \
     --eval_period 1000 \
+    --eval_n_trajs 3 \
     --reward_scale 1 \
     # --debug

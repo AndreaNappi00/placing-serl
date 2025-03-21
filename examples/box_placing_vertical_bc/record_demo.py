@@ -15,7 +15,7 @@ from serl_launcher.wrappers.serl_obs_wrappers import SerlObsWrapperNoImages, Ser
 from serl_launcher.wrappers.chunking import ChunkingWrapper
 
 from gymnasium.wrappers import TransformReward
-from ur_env.envs.relative_env import RelativeFrame
+from ur_env.envs.relative_env import RelativeFrame, RelativeReward
 
 exit_program = threading.Event()
 
@@ -36,6 +36,7 @@ if __name__ == "__main__":
     env = gym.make("box_placing_vertical_env")
     env = SpacemouseIntervention(env)
     env = RelativeFrame(env)
+    env = RelativeReward(env)
     env = Quat2rotvecWrapper(env)
     env = ScaleObservationWrapper(env)
     env = SerlObsWrapperTrajBox(env)
@@ -74,6 +75,7 @@ if __name__ == "__main__":
 
             next_obs, rew, done, truncated, info = env.step(action=np.zeros((7,)))
             actions = info["intervene_action"]
+            # print("actions at the end of the step: ", actions)
 
             transition = copy.deepcopy(
                 dict(
@@ -89,10 +91,10 @@ if __name__ == "__main__":
             # pprint(transition)
 
             obs = next_obs
+            # print("obs: ", obs)
             
-            forces_status = f"{Fore.GREEN if info.get('forces') else Fore.RED}{'True' if info.get('forces') else 'False'}{Style.RESET_ALL}"
             box_status = f"{Fore.GREEN if info.get('box_pose') else Fore.RED}{'True' if info.get('box_pose') else 'False'}{Style.RESET_ALL}"
-            pbar.set_description(f"Forces: {forces_status}, Box: {box_status}")
+            pbar.set_description(f"Box: {box_status}")
 
             if done:
                 success_count += int(rew > 50)

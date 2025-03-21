@@ -21,7 +21,7 @@ from serl_launcher.utils.timer_utils import Timer
 from serl_launcher.data.data_store import populate_data_store
 
 from serl_launcher.wrappers.chunking import ChunkingWrapper
-from ur_env.envs.relative_env import RelativeFrame
+from ur_env.envs.relative_env import RelativeFrame, RelativeReward
 
 from agentlace.trainer import TrainerServer, TrainerClient
 from agentlace.data.data_store import QueuedDataStore
@@ -401,6 +401,7 @@ def main(_):
     if FLAGS.actor:
         env = SpacemouseIntervention(env)
     env = RelativeFrame(env)
+    env = RelativeReward(env)
     env = Quat2rotvecWrapper(env)
     env = ScaleObservationWrapper(env)
     env = SerlObsWrapperTrajBox(env)
