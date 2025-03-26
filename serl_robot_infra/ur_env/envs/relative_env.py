@@ -203,7 +203,7 @@ class RelativeReward(gym.Wrapper):
         position_cost = 5. * np.sum(
             np.where(np.abs(pos_diff) > max_pose_diff, np.abs(pos_diff - np.sign(pos_diff) * max_pose_diff), 0.0)
         )
-        print("box", obs["state"]["boxes"][:3])
+        # print("box", obs["state"]["boxes"][:])
 
         orientation_cost_box = 1. - sum(R.from_rotvec(obs["state"]["boxes"][3:]).as_quat() * R.from_rotvec(obs["state"]["goal_pose"][3:]).as_quat()) ** 2
         orientation_cost_box = max(orientation_cost_box - 0.005, 0.) * 1.

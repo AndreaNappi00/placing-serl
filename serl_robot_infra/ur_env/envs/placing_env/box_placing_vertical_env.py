@@ -75,9 +75,9 @@ class BoxPlacingVerticalEnv(UR5Env):
             self.trajectory_dir[:3] = np.array([0., 0., 1.]) * (1/scaling)
         elif self.gripper_state[0]:   # go to goal
             
-            horizontal_total = 0.1
             horizontal_distance = np.linalg.norm(goal_pose_o[:2] - self.box_position[:2])
-            s = np.clip(1 - horizontal_distance / horizontal_total, 0, 1) if horizontal_total > 0 else 0
+            # When the horizontal distance is between 3cm and 7cm, interpolate s from 0 to 1.
+            s = np.clip((horizontal_distance - 0.03) / (0.10 - 0.03), 0, 1)
 
             H = 0.03  # maximum additional height
             parabolic_offset = 4 * H * s * (1 - s)
