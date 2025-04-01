@@ -15,7 +15,7 @@ from serl_launcher.wrappers.serl_obs_wrappers import SerlObsWrapperNoImages, Ser
 from serl_launcher.wrappers.chunking import ChunkingWrapper
 
 from gymnasium.wrappers import TransformReward
-from ur_env.envs.relative_env import RelativeFrame, RelativeReward
+from ur_env.envs.relative_env import RelativeFrame, RelativeRewardVertical
 
 exit_program = threading.Event()
 
@@ -36,7 +36,7 @@ if __name__ == "__main__":
     env = gym.make("box_placing_vertical_env")
     env = SpacemouseIntervention(env)
     env = RelativeFrame(env)
-    env = RelativeReward(env)
+    env = RelativeRewardVertical(env)
     env = Quat2rotvecWrapper(env)
     env = ScaleObservationWrapper(env)
     env = SerlObsWrapperTrajBox(env)

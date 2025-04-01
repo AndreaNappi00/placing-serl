@@ -21,7 +21,7 @@ from serl_launcher.utils.timer_utils import Timer
 from serl_launcher.data.data_store import populate_data_store
 
 from serl_launcher.wrappers.chunking import ChunkingWrapper
-from ur_env.envs.relative_env import RelativeFrame
+from ur_env.envs.relative_env import RelativeFrame, RelativeRewardCorner
 
 from agentlace.trainer import TrainerServer, TrainerClient
 from agentlace.data.data_store import QueuedDataStore
@@ -142,7 +142,7 @@ def actor(agent: SACAgent, data_store, env, sampling_rng, wandb_logger=None):
                 wandb_logger.log(info, step=step)
                 
                 forces_status = f"{Fore.GREEN if info.get('forces') else Fore.RED}{'True' if info.get('forces') else 'False'}{Style.RESET_ALL}"
-                box_status = f"{Fore.GREEN if info.get('box_position') else Fore.RED}{'True' if info.get('box_position') else 'False'}{Style.RESET_ALL}"
+                box_status = f"{Fore.GREEN if info.get('box_pose') else Fore.RED}{'True' if info.get('box_pose') else 'False'}{Style.RESET_ALL}"
                 print(f"Forces: {forces_status}, Box: {box_status}, Reward: {reward}, Running Reward: {running_reward}", end='\r')
                 
                 step += 1
@@ -402,6 +402,7 @@ def main(_):
     if FLAGS.actor:
         env = SpacemouseIntervention(env)
     env = RelativeFrame(env)
+    env = RelativeRewardCorner(env)
     env = Quat2MrpWrapper(env)
     env = ScaleObservationWrapper(env)
     env = SerlObsWrapperTrajBox(env)

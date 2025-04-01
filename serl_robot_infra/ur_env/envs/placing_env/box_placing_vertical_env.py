@@ -82,8 +82,8 @@ class BoxPlacingVerticalEnv(UR5Env):
             H = 0.03  # maximum additional height
             parabolic_offset = 4 * H * s * (1 - s)
 
-            traj = goal_pose_o[:3] - self.curr_pos[:3]
-            traj[2] = 0.05 * (goal_pose_o[2] - self.curr_pos[2]) + parabolic_offset
+            traj = goal_pose_o[:3] - self.box_position[:3]
+            traj[2] = 0.05 * (goal_pose_o[2] - self.box_position[2]) + parabolic_offset
 
             self.trajectory_dir[:3] = traj / (np.linalg.norm(traj) * scaling)
         else:   # box dropped # go to box
@@ -261,7 +261,7 @@ class BoxPlacingVerticalEnv(UR5Env):
         if "force_cost" in self.cost_infos:
             self.cost_infos["force_cost"] = min(50., self.cost_infos["force_cost"])
 
-    def compute_reward(self, obs, action) -> float:
+    def compute_reward(self, obs, action) -> float: # overridden
 
         # huge action gives negative reward (like in mountain car)
         norm_action = np.linalg.norm(action[:3])

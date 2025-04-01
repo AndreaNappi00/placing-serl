@@ -31,7 +31,7 @@ from serl_launcher.data.data_store import (
 from serl_launcher.wrappers.serl_obs_wrappers import SerlObsWrapperNoImages, SerlObsWrapperTrajBox, ScaleObservationWrapper
 from serl_launcher.networks.reward_classifier import load_classifier_func
 from ur_env.envs.wrappers import SpacemouseIntervention, Quat2rotvecWrapper
-from ur_env.envs.relative_env import RelativeFrame,RelativeReward
+from ur_env.envs.relative_env import RelativeFrame,RelativeRewardVertical
 from serl_launcher.utils.sampling_utils import TemporalActionEnsemble
 
 
@@ -86,7 +86,7 @@ def main(_):
     )
     # env = SpacemouseIntervention(env)
     env = RelativeFrame(env)
-    env = RelativeReward(env)
+    env = RelativeRewardVertical(env)
     env = Quat2rotvecWrapper(env)
     env = ScaleObservationWrapper(env)
     env = SerlObsWrapperTrajBox(env)

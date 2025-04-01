@@ -15,7 +15,7 @@ from serl_launcher.wrappers.serl_obs_wrappers import SerlObsWrapperNoImages, Ser
 from serl_launcher.wrappers.chunking import ChunkingWrapper
 
 from gymnasium.wrappers import TransformReward
-from ur_env.envs.relative_env import RelativeFrame
+from ur_env.envs.relative_env import RelativeFrame, RelativeRewardCorner
 
 exit_program = threading.Event()
 
@@ -36,6 +36,7 @@ if __name__ == "__main__":
     env = gym.make("box_placing_corner_env")
     env = SpacemouseIntervention(env)
     env = RelativeFrame(env)
+    env = RelativeRewardCorner(env)
     env = Quat2MrpWrapper(env)
     env = ScaleObservationWrapper(env)
     env = SerlObsWrapperTrajBox(env)
@@ -91,7 +92,7 @@ if __name__ == "__main__":
             obs = next_obs
             
             forces_status = f"{Fore.GREEN if info.get('forces') else Fore.RED}{'True' if info.get('forces') else 'False'}{Style.RESET_ALL}"
-            box_status = f"{Fore.GREEN if info.get('box_position') else Fore.RED}{'True' if info.get('box_position') else 'False'}{Style.RESET_ALL}"
+            box_status = f"{Fore.GREEN if info.get('box_pose') else Fore.RED}{'True' if info.get('box_pose') else 'False'}{Style.RESET_ALL}"
             pbar.set_description(f"Forces: {forces_status}, Box: {box_status}")
 
             if done:
