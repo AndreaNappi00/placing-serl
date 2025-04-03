@@ -11,7 +11,7 @@ python sac_policy_hil.py "$@" \
     --max_steps 50000 \
     --reward_scale 1 \
     --demo_paths "demos/ur5_test_20_demos_2025-02-23_15-48-21.pkl" \
-    --eval_checkpoint_step 50000 \
+    --eval_checkpoint_step 0 \
     --load_checkpoint_path "checkpoints" \
     # --debug
 #    --preload_rlds_path "/home/amdrea/Code/voxel-serl/examples/box_picking_sac/rlds" \

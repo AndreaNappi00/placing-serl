@@ -115,7 +115,7 @@ class UR5Env(gym.Env):
             hz: int = 10,
             fake_env=False,
             config=DefaultEnvConfig,
-            max_episode_length: int = 150,
+            max_episode_length: int = 200,
             save_video: bool = False,
             camera_mode: str = "none",  # one of (rgb, grey, depth, both(rgb depth), pointcloud, none)
     ):

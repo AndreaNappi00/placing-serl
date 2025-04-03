@@ -354,16 +354,18 @@ class RelativeRewardVertical(gym.Wrapper):
         norm_action = np.linalg.norm(action[:3])
         if norm_action > 0.:
             action_cost = 0.2 * (1 - np.dot(action[:3]/norm_action, obs["state"]["trajectory"][:3]/np.linalg.norm(obs["state"]["trajectory"][:3])))
+            sim2real = np.linalg.norm(action[:3]/norm_action - obs["state"]["trajectory"][:3]/np.linalg.norm(obs["state"]["trajectory"][:3]))
         else:
             action_cost = 0
+            sim2real = 0
         action_diff_cost = 2 * np.sum(np.power(action - self.last_action, 2))    #0.2
         
         self.last_action[:] = action
         step_cost = 0.05
 
         gripper_release_cost = 0
-        if obs["state"]["gripper_state"][1] and action[-1] < -0.5 and not self.announced_goals['box_pose']:
-            gripper_release_cost = 50
+        if obs["state"]["gripper_state"][1] == 1 and action[-1] < -0.5 and not self.announced_goals['box_pose']:
+            gripper_release_cost = 100
 
         suction_cost = 0
         suction_reward = 0
@@ -387,7 +389,7 @@ class RelativeRewardVertical(gym.Wrapper):
         
         max_pose_diff = 0.02  # set to 5mm
         pos_diff = obs["state"]["goal_pose"][:3] - obs["state"]["boxes"][:3]
-        position_cost = 5. * np.sum(
+        position_cost = 3. * np.sum(
             np.where(np.abs(pos_diff) > max_pose_diff, np.abs(pos_diff - np.sign(pos_diff) * max_pose_diff), 0.0)
         )
         # print("box", obs["state"]["boxes"][:])
@@ -412,6 +414,8 @@ class RelativeRewardVertical(gym.Wrapper):
         for key, info in self.announced_goals.items():
             self.unwrapped.cost_infos[key] = info
 
+        self.unwrapped.cost_infos["sim2real"] = sim2real
+        
         self.unwrapped.clip_costs()
 
         if self.reached_goal_state(obs):

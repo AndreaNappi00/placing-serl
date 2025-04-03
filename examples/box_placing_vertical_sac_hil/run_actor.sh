@@ -4,7 +4,7 @@ python sac_policy_hil.py "$@" \
     --actor \
     --env box_placing_vertical_env \
     --exp_name=sac_hil_vertical_policy \
-    --max_traj_length 150 \
+    --max_traj_length 200 \
     --seed 42 \
     --max_steps 10000 \
     --random_steps 0 \

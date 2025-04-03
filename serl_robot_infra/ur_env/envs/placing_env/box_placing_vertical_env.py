@@ -65,7 +65,7 @@ class BoxPlacingVerticalEnv(UR5Env):
         return super_return
 
     def _update_trajectory_dir(self):
-        scaling = 4
+        scaling = 2
         T_o_r = construct_homogeneous_matrix(self.curr_reset_pose)
         T_r_goal = construct_homogeneous_matrix(self.goal_pose)
         T_o_goal =  T_o_r @ T_r_goal
@@ -92,9 +92,10 @@ class BoxPlacingVerticalEnv(UR5Env):
             target_picking[2] += 0.14 + self.box_size / 2
 
             # Compute the total horizontal displacement from the starting position to the target
-            horizontal_total = np.linalg.norm(target_picking[:2] - self.curr_reset_pose[:2])
+            # horizontal_total = np.linalg.norm(target_picking[:2] - self.curr_reset_pose[:2])
+            horizontal_total = 0.1
             # Compute the horizontal progress made so far
-            horizontal_progress = np.linalg.norm(self.curr_pos[:2] - self.curr_reset_pose[:2])
+            horizontal_progress = np.linalg.norm(self.curr_pos[:2] - target_picking[:2])
             s = np.clip(horizontal_progress / horizontal_total, 0, 1) if horizontal_total > 0 else 0
 
             # Define a parabolic offset that is zero at s=0 and s=1 and peaks at s=0.5
@@ -135,7 +136,7 @@ class BoxPlacingVerticalEnv(UR5Env):
         # orientation
         next_pos[3:] = (
             R.from_mrp(action_filtered[3:6] * self.action_scale[1] / 4.) \
-            * R.from_rotvec(self.trajectory_dir[3:] / 100.) *  R.from_quat(next_pos[3:])
+            * R.from_rotvec(self.trajectory_dir[3:] / 25.) *  R.from_quat(next_pos[3:])
         ).as_quat()             # c * r  --> applies c after r
 
         gripper_action = action[6] * self.action_scale[2]

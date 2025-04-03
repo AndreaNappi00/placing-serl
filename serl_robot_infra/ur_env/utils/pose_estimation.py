@@ -120,7 +120,11 @@ class BoxPoseEstimation:
         self.HEARTBEAT_INTERVAL = 30  # seconds
         self.MAX_RECONNECT_ATTEMPTS = 3
         
-        self.sizes = {"box_1": 0.1, "box_4": 0.13}
+        self.sizes = {"box_1": 0.1, 
+                      "box_4": 0.13, 
+                      "box_330": 0.09, 
+                      "box_340": 0.11
+                      }
     
     def _run_async_loop(self):
         """Run the async event loop in a separate thread"""
@@ -154,7 +158,6 @@ class BoxPoseEstimation:
         Async function to read data from the server containing box pose
         """
         reconnect_attempts = 0
-        box_name = ["box_1", "box_4"]
         
         while not self.stop_event.is_set():
             try:
@@ -176,7 +179,7 @@ class BoxPoseEstimation:
                             # print("Message received")
                             # Safely update the message with a lock
                             for key in message['space'][0]['boxes'].keys():
-                                if key in box_name:
+                                if key in self.sizes.keys():
                                     with self.state_lock:
                                         self.size = self.sizes[key]
                                         self.pos = message['space'][0]['boxes'][key]['world2box']['pos']
