@@ -144,8 +144,8 @@ class RelativeRewardCorner(gym.Wrapper):
             'forces': False,
         }
         
-        self.force_desired = 10.
-        self.force_tolerance = 5.
+        self.force_desired = 3.
+        self.force_tolerance = 12.
     
     def step(self, action: np.array):
         # print("action", action)
@@ -160,54 +160,68 @@ class RelativeRewardCorner(gym.Wrapper):
         new_info.update(info)
         
         return obs, reward, done, truncated, new_info
-    
-    def update_box_pose_goal(self, obs):        
-        angle_diff = (R.from_rotvec(obs["state"]["boxes"][3:]).inv() * R.from_rotvec(obs["state"]["goal_pose"][3:])).magnitude()
-        pos_diff = np.linalg.norm(obs["state"]["boxes"][:2] - obs["state"]["goal_pose"][:2])
-        z_diff = np.abs(obs["state"]["boxes"][2] - obs["state"]["goal_pose"][2])
-
-        pose_in_goal = pos_diff < 0.05 and z_diff < 0.02 and angle_diff < 0.15
-        if pose_in_goal:
-            self.announced_goals['box_pose'] = True
-        elif self.announced_goals['box_pose']:
-            if not pose_in_goal:
-                self.announced_goals['box_pose'] = False
-                
+           
     def get_force_cost(self, obs):
         if self.announced_goals['forces']:
             return 0.
-        alpha_reward = 10
-        alpha_cost = 0.1
-        delta_err_x = self.force_desired - obs["state"]["tcp_force"][0]
-        delta_err_y = self.force_desired - obs["state"]["tcp_force"][1]
+        alpha_reward = 2
+        alpha_cost = 1
+        reward = 0.
+        cost = 0.
+        forces = self.get_force_box_frame(obs)
         
-        reward =  alpha_reward * np.exp(- (delta_err_x ** 2 + delta_err_y ** 2) / (self.force_tolerance ** 2))
-        magnitude_cost = alpha_cost * np.power(np.max([0, np.linalg.norm(obs["state"]["tcp_force"]) - (np.abs(self.force_desired) + self.force_tolerance)]), 2)
-        direction = obs["state"]["tcp_force"] / np.linalg.norm(obs["state"]["tcp_force"])
-        # direction_cost = alpha_cost * np.power(np.max([0, np.cos(self.angle_tolerance) - np.dot(obs["state"]["tcp_force"], direction) / (np.linalg.norm(obs["state"]["tcp_force"] * 1e-6))]), 2)
-        z_cost = alpha_cost * np.power(np.max([0, np.abs(obs["state"]["tcp_force"][2]) - 20]), 2)
-        cost = magnitude_cost + z_cost
+        for force in forces:
+            if force > self.force_desired:
+                if force < self.force_desired + self.force_tolerance:
+                    reward += alpha_reward
+                else:
+                    cost += alpha_cost 
         
         return cost - reward
 
-    def update_force_goal(self, obs):
-        forces = obs["state"]["tcp_force"][:2]
-        gripper_active = obs["state"]["gripper_state"][1] > 0.5
-        release_action = obs["state"]["action"][-1] < -0.5
+    def get_force_box_frame(self, obs):
+        T_r_ee = construct_homogeneous_matrix(obs["state"]["tcp_pose"])
+        R_r_ee = T_r_ee[:3, :3]
+        force_r = R_r_ee.T @ obs["state"]["tcp_force"]
 
-        force_goal = all(
-            np.abs(self.force_desired) - self.force_tolerance < np.abs(force)
-            for force in forces
-        )
-        
-        if self.announced_goals['forces'] and release_action:
-            pass
-        elif force_goal or sum(self.force_goal_history) > 3:
-            self.announced_goals['forces'] = True
-        elif gripper_active:
-            self.announced_goals['forces'] = False
+        R_box = R.from_rotvec(obs["state"]["boxes"][3:]).as_matrix()
+        x_box_axis_r = R_r_ee.T @ R_box[:, 0]
+        y_box_axis_r = R_r_ee.T @ R_box[:, 1]
+
+        proj_scalar_x = np.dot(force_r, x_box_axis_r) / (np.linalg.norm(x_box_axis_r) + 1e-6)
+        proj_scalar_y = np.dot(force_r, y_box_axis_r) / (np.linalg.norm(y_box_axis_r) + 1e-6)
+
+        return proj_scalar_x, proj_scalar_y
+    
+    def update_box_pose_goal(self, obs):        
+        angle_diff = (R.from_rotvec(obs["state"]["boxes"][3:]).inv() * R.from_rotvec(obs["state"]["goal_pose"][3:])).magnitude()
+        # pos_diff = np.linalg.norm(obs["state"]["boxes"][:2] - obs["state"]["goal_pose"][:2])
+        z_diff = np.abs(obs["state"]["boxes"][2] - obs["state"]["goal_pose"][2])
+
+        pose_in_goal = z_diff < 0.02 and angle_diff < 0.15
+        has_box_moved = self.unwrapped.has_box_moved()
+                
+        if pose_in_goal and not has_box_moved:
+            self.announced_goals['box_pose'] = True
+        elif self.announced_goals['box_pose']:
+            if not pose_in_goal or has_box_moved:
+                self.announced_goals['box_pose'] = False
+    
+    def update_force_goal(self, obs):
+        forces = np.array(self.get_force_box_frame(obs))
         self.force_goal_history = np.roll(self.force_goal_history, 1)
-        self.force_goal_history[0] = force_goal
+        
+        for i in range(2):
+            if forces[i] > self.force_desired and forces[i] < self.force_desired + self.force_tolerance:
+                self.force_goal_history[i, 0] = 1
+            else:
+                self.force_goal_history[i, 0] = 0
+                
+        if np.all(self.force_goal_history.sum(axis=1) > 1):
+            self.announced_goals['forces'] = True
+            self.unwrapped.update_last_box_pose()
+        # else:
+        #     self.announced_goals['forces'] = False
 
     def compute_reward(self, obs) -> float:
         action = obs["state"]["action"]
@@ -215,26 +229,26 @@ class RelativeRewardCorner(gym.Wrapper):
         norm_action = np.linalg.norm(action[:3])
         if norm_action > 0.:
             action_cost = 0.2 * (1 - np.dot(action[:3]/norm_action, obs["state"]["trajectory"][:3]/np.linalg.norm(obs["state"]["trajectory"][:3])))
+            sim2real = np.linalg.norm(action[:3]/norm_action - obs["state"]["trajectory"][:3]/np.linalg.norm(obs["state"]["trajectory"][:3]))
         else:
             action_cost = 0
-        action_diff_cost = 0.2 * np.sum(np.power(action - self.last_action, 2))    #0.2
+            sim2real = 0
+        action_diff_cost = 2 * np.sum(np.power(action - self.last_action, 2))    #0.2
 
         self.last_action[:] = action
         step_cost = 0.05
         
         gripper_release_cost = 0
-        if obs["state"]["gripper_state"][1] and action[-1] < -0.5 and not self.announced_goals['forces']:
+        if obs["state"]["gripper_state"][1] == 1 and action[-1] < -0.5 and not self.announced_goals['forces']:
             gripper_release_cost = 50
         
         suction_cost = 0
         suction_reward = 0
-        if self.announced_goals['forces'] and self.announced_goals['box_pose']:
-            suction_reward = 2 * float(action[-1] < -0.5)
-        elif obs["state"]["gripper_state"][1] > 0.5:
+        if self.announced_goals['box_pose'] or obs["state"]["gripper_state"][1] > 0.5:
             suction_reward = 2
         else:
             suction_cost = 1 * float(action[-1] > 0.5)
-        
+            
         # Compute orientation cost from tcp_pose using rotation vector excluding the z component
         rotvec = R.from_quat(obs["state"]["tcp_pose"][3:]).as_rotvec()
         rotvec[2] = 0  # ignore z rotation
@@ -246,18 +260,19 @@ class RelativeRewardCorner(gym.Wrapper):
         q_goal = R.from_rotvec(obs["state"]["goal_pose"][3:])
         rotation_diff = q_box.inv() * q_goal
         angle_box = rotation_diff.magnitude()
-        orientation_cost_box = max(angle_box - 0.005, 0.) * 0.5
-                
-        max_pose_diff = 0.05  # set to 5cm
+        orientation_cost_box = np.where(angle_box > 0.005, angle_box, 0) * 0.5
+        
+        max_pose_diff = 0.005  # set to 5mm
         pos_diff = obs["state"]["goal_pose"][:3] - obs["state"]["boxes"][:3]
         position_cost = 5. * np.sum(
             np.where(np.abs(pos_diff) > max_pose_diff, np.abs(pos_diff - np.sign(pos_diff) * max_pose_diff), 0.0)
         )
-                
+        
+        # print("box", obs["state"]["boxes"][:])
+                        
         force_cost = self.get_force_cost(obs)
         self.update_force_goal(obs)
         self.update_box_pose_goal(obs)
-        
         
         cost_info = dict(
             action_cost=action_cost,
@@ -278,19 +293,49 @@ class RelativeRewardCorner(gym.Wrapper):
         for key, info in self.announced_goals.items():
             self.unwrapped.cost_infos[key] = info
         
+        self.unwrapped.cost_infos["sim2real"] = sim2real
+
         self.unwrapped.clip_costs()
         
         if self.reached_goal_state(obs):
             self.unwrapped.config.SUCCESS_COUNT += 1
-            return 300. - action_cost - orientation_cost - action_diff_cost - force_cost - position_cost\
+            
+            pos_err, angle_err = self.compute_final_error(obs)
+            self.unwrapped.cost_infos["final_error"] = np.linalg.norm(np.array([pos_err, angle_err]))
+            self.unwrapped.cost_infos["final_error_pos"] = pos_err
+            self.unwrapped.cost_infos["final_error_angle"] = angle_err
+            
+            print("final_error", self.unwrapped.cost_infos["final_error"])
+            print("final_error_pos", self.unwrapped.cost_infos["final_error_pos"])
+            print("final_error_angle", self.unwrapped.cost_infos["final_error_angle"])
+            
+            return 500. - action_cost - orientation_cost - action_diff_cost - force_cost - position_cost\
                 - suction_cost + suction_reward - orientation_cost_box - gripper_release_cost
         else:
             return 0. - action_cost - orientation_cost - suction_cost - position_cost\
                 - step_cost - action_diff_cost - force_cost + suction_reward\
                 - orientation_cost_box - gripper_release_cost
 
+    def compute_final_error(self, obs) -> tuple[float, float]:
+        
+        T_o_r = construct_homogeneous_matrix(self.unwrapped.curr_reset_pose)
+        T_r_ee = construct_homogeneous_matrix(obs["state"]["tcp_pose"])
+        T_ee_box = construct_homogeneous_matrix(obs["state"]["boxes"])
+        T_o_box = T_o_r @ T_r_ee @ T_ee_box
+        box_pose_o = np.concatenate((T_o_box[:3, 3], R.from_matrix(T_o_box[:3, :3]).as_rotvec()))
+        
+        # goal_pose_o = np.array([-0.4926, 0.15, -0.0488, -2.215, 2.1885, 0.0087])    # box_1
+        goal_pose_o = np.array([-0.4792, 0.1571, -0.0489, -2.2, 2.1867, 0.018 ])        #box_330
+        goal_pose_o = np.array([-0.4822,  0.1451, -0.0459, -2.2266,  2.1877,  0.0131])        #box_340
+        
+        # Compute the final error based on the box position and orientation
+        pos_diff =  np.linalg.norm(box_pose_o[:3] - goal_pose_o[:3])
+        angle_diff = (R.from_rotvec(box_pose_o[3:]).inv() * R.from_rotvec(goal_pose_o[3:])).magnitude()
+                
+        return pos_diff, angle_diff
+
     def reached_goal_state(self, obs) -> bool:
-        ee_box_distance_goal = np.linalg.norm(obs["state"]["tcp_pose"][2] - obs["state"]["boxes"][2]) > 0.25        
+        ee_box_distance_goal = np.linalg.norm(obs["state"]["boxes"][2]) > 0.25
         
         if ee_box_distance_goal and not self.announced_goals['ee_box_distance']:
             self.announced_goals['ee_box_distance'] = True
@@ -303,7 +348,7 @@ class RelativeRewardCorner(gym.Wrapper):
         obs, info = self.env.reset(**kwargs)
         
         self.last_action[:] = 0.
-        self.force_goal_history = np.zeros(10)
+        self.force_goal_history = np.zeros((2,10))
         for key in self.announced_goals.keys():
             self.announced_goals[key] = False
         self.low_pass_filter = np.zeros((7, 5))
@@ -440,7 +485,7 @@ class RelativeRewardVertical(gym.Wrapper):
         obs, info = self.env.reset(**kwargs)
         
         self.last_action[:] = 0.
-        self.force_goal_history = np.zeros(10)
+        self.force_goal_history = np.zeros(50)
         for key in self.announced_goals.keys():
             self.announced_goals[key] = False
         self.low_pass_filter = np.zeros((7, 5))

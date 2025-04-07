@@ -143,7 +143,7 @@ class UR5Env(gym.Env):
         self.low_pass_filter_k = config.LOW_PASS_FILTER
         
         # boxes
-        self.box_pose = BoxPoseEstimation(self.pose_estimation_ip) if config.POSE_ESTIMATION else None
+        self.box_pose_est = BoxPoseEstimation(self.pose_estimation_ip) if config.POSE_ESTIMATION else None
         self.goal_pose = np.zeros((3,), dtype=np.float32)
         self.box_position = np.zeros((3,), dtype=np.float32)
         self.box_orientation = np.zeros((3,), dtype=np.float32)
@@ -222,8 +222,8 @@ class UR5Env(gym.Env):
         state_space = gym.spaces.Dict(
             {
                 "tcp_pose": gym.spaces.Box(
-                    -np.inf, np.inf, shape=(7,)
-                ),  # xyz + quat
+                    -np.inf, np.inf, shape=(6,)
+                ),  # xyz + rotvec
                 "tcp_vel": gym.spaces.Box(-np.inf, np.inf, shape=(6,)),
                 "gripper_state": gym.spaces.Box(-1., 1., shape=(2,)),
                 "tcp_force": gym.spaces.Box(-np.inf, np.inf, shape=(3,)),
@@ -654,15 +654,15 @@ class UR5Env(gym.Env):
         self.controller.set_reset_pose(target_pos)
         
     def _update_box_pos_estimate(self):
-        self.box_position = self.box_pose.get_box_position()
+        self.box_position = self.box_pose_est.get_box_position()
         self.box_position = self.WF_rot @ self.box_position
 
     def _update_box_orientation_estimate(self):
-        self.box_orientation = self.box_pose.get_box_orientation()
+        self.box_orientation = self.box_pose_est.get_box_orientation()
         self.box_orientation = (R.from_matrix(self.rotation_generalization) * R.from_matrix(self.WF_rot) * R.from_rotvec(self.box_orientation)).as_rotvec()
         
     def _update_box_size_estimate(self):
-        self.box_size = self.box_pose.get_box_size()
+        self.box_size = self.box_pose_est.get_box_size()
         
     def _get_goal_pose(self):
         """
@@ -718,5 +718,5 @@ class UR5Env(gym.Env):
         if self.controller:
             self.controller.stop()
         if self.pose_est:
-            self.box_pose.stop()
+            self.box_pose_est.stop()
         super().close()

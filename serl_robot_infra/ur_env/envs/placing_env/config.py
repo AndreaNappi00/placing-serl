@@ -17,7 +17,7 @@ class UR5PlacingCornerConfig(DefaultEnvConfig):
     # ABS_POSE_LIMIT_HIGH = np.array([0.14, -0.4, 0.2, 3.2, 0.1, 3.2])            # TODO euler rotations suck :/
     # ABS_POSE_LIMIT_LOW = np.array([-0.3, -0.7, -0.006, 3.0, -0.1, -3.2])
     ABS_POSE_LIMIT_HIGH = np.array([-0.3, 0.2, 0.4, 0.05, 0.05, 0.2])
-    ABS_POSE_LIMIT_LOW = np.array([-0.55, -0.1, 0.12, -0.05, -0.05, -0.2])
+    ABS_POSE_LIMIT_LOW = np.array([-0.65, -0.1, 0.08, -0.05, -0.05, -0.2])
     ACTION_SCALE = np.array([0.01, 0.05, 1.], dtype=np.float32)
 
     ROBOT_IP: str = "192.168.1.66"
@@ -29,7 +29,9 @@ class UR5PlacingCornerConfig(DefaultEnvConfig):
     FORCEMODE_SELECTION_VECTOR = np.ones(6, dtype=np.int8)
     FORCEMODE_LIMITS = np.array([0.5, 0.5, 0.5, 1., 1., 1.])
 
-    GOAL_POSE = np.array([0.024, 0.02, 0.2143, 0., -3.14, 0.])    #box_1
+    GOAL_POSE = np.array([0.024, 0.02, 0.21, 0., 0., 3.14])     #box_1
+    GOAL_POSE = np.array([0.03, 0.03, 0.21, 0., 0., 3.14])      #box_340
+    GOAL_POSE = np.array([0.035, 0.03, 0.21, 0., 0., 3.14])     #box_330
     # GOAL_POSITION = np.array([-0.38, -0.01, -0.04])    #box_1 next to box_3
     # GOAL_POSITION = np.array([-0.38, -0.12, -0.04])    #box_5 next to box_1
     

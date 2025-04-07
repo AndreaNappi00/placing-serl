@@ -33,11 +33,9 @@ class BoxPlacingVerticalEnv(UR5Env):
         # # Update observation space with merged spaces
         # self.observation_space = gym.spaces.Dict(obs_space_definition)
 
-        self.announced_goals = {
-            'box_pose': False,
-            'ee_box_distance': False,
-            'forces': False,
-        }
+        self.cost_infos['forces'] = False
+        self.cost_infos['box_pose'] = False
+        self.cost_infos['ee_box_distance'] = False
         self.force_desired = -12
         self.force_tolerance = 3
         self.angle_tolerance = np.pi/3*2
@@ -47,9 +45,6 @@ class BoxPlacingVerticalEnv(UR5Env):
 
         self.last_action[:] = 0.
         self.force_goal_history = np.zeros(10)
-        self.announced_goals['forces'] = False
-        self.announced_goals['box_pose'] = False
-        self.announced_goals['ee_box_distance'] = False
         self.low_pass_filter = np.zeros((7, 5))
 
         super_return = super().reset(**kwargs)
@@ -61,6 +56,10 @@ class BoxPlacingVerticalEnv(UR5Env):
             self._update_box_orientation_estimate()
             self._update_box_size_estimate()
             self._update_trajectory_dir()
+            
+        self.cost_infos['forces'] = False
+        self.cost_infos['box_pose'] = False
+        self.cost_infos['ee_box_distance'] = False
 
         return super_return
 
@@ -71,7 +70,7 @@ class BoxPlacingVerticalEnv(UR5Env):
         T_o_goal =  T_o_r @ T_r_goal
         goal_pose_o = np.concatenate([T_o_goal[:3, 3], R.from_matrix(T_o_goal[:3, :3]).as_rotvec()])
         
-        if 'box_pose' in self.cost_infos and self.cost_infos['box_pose'] and not self.gripper_state[1]: #move up slowly
+        if self.cost_infos['box_pose'] and not self.gripper_state[1]: #move up slowly
             self.trajectory_dir[:3] = np.array([0., 0., 1.]) * (1/scaling)
         elif self.gripper_state[0]:   # go to goal
             
@@ -128,7 +127,9 @@ class BoxPlacingVerticalEnv(UR5Env):
         else:
             action_filtered = action
 
+        # position
         next_pos[:3] = next_pos[:3] + (action_filtered[:3] + self.trajectory_dir[:3]) * self.action_scale[0]
+        # next_pos[:3] = next_pos[:3] + action_filtered[:3] * self.action_scale[0]
         # next_pos[:3] = next_pos[:3] + (self.trajectory_dir[:3]) * self.action_scale[0]
 
         self.cost_infos["intervene_action"] = action

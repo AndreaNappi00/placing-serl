@@ -15,6 +15,14 @@ from franka_env.utils.transformations import construct_homogeneous_matrix, const
 def is_close(value, target):
     return abs(value - target) < 1e-4
 
+def rot_vec_diff(r1, r2):
+    """
+    Compute the difference between two rotation vectors.
+    """
+    r1 = R.from_rotvec(r1)
+    r2 = R.from_rotvec(r2)
+    return (r1.inv() * r2).magnitude()
+
 class BoxPlacingCornerEnv(UR5Env):
     def __init__(self, **kwargs):
         super().__init__(**kwargs, config=UR5PlacingCornerConfig)
@@ -33,11 +41,6 @@ class BoxPlacingCornerEnv(UR5Env):
         # # Update observation space with merged spaces
         # self.observation_space = gym.spaces.Dict(obs_space_definition)
         
-        self.announced_goals = {
-            'box_position': False,
-            'ee_box_distance': False,
-            'forces': False,
-        }
         self.force_desired = -12
         self.force_tolerance = 3
         self.angle_tolerance = np.pi/3*2
@@ -47,9 +50,6 @@ class BoxPlacingCornerEnv(UR5Env):
         
         self.last_action[:] = 0.
         self.force_goal_history = np.zeros(10)
-        self.announced_goals['forces'] = False
-        self.announced_goals['box_position'] = False
-        self.announced_goals['ee_box_distance'] = False
         self.low_pass_filter = np.zeros((7, 5))
         
         super_return = super().reset(**kwargs)
@@ -62,16 +62,20 @@ class BoxPlacingCornerEnv(UR5Env):
             self._update_box_size_estimate()
             self._update_trajectory_dir()
         
+        self.cost_infos['forces'] = False
+        self.cost_infos['box_position'] = False
+        self.cost_infos['ee_box_distance'] = False
+        self.last_box_pose = np.concatenate([self.box_position, self.box_orientation])
+        
         return super_return
     
     def goal_reached(self):
-        return self.announced_goals['forces'] and \
-            'box_pose' in self.cost_infos and \
-            self.cost_infos['box_pose'] and \
+        return 'forces' in self.cost_infos and self.cost_infos['forces'] and \
+            'box_pose' in self.cost_infos and self.cost_infos['box_pose'] and \
             not self.gripper_state[1]
     
     def _update_trajectory_dir(self):
-        scaling = 4
+        scaling = 2
         T_o_r = construct_homogeneous_matrix(self.curr_reset_pose)
         T_r_goal = construct_homogeneous_matrix(self.goal_pose)
         T_o_goal =  T_o_r @ T_r_goal
@@ -80,18 +84,20 @@ class BoxPlacingCornerEnv(UR5Env):
         if self.goal_reached(): #move up slowly
             self.trajectory_dir[:3] = np.array([0., 0., 1.]) * (1/scaling)
         elif self.gripper_state[0]:   # go to goal
-            self.trajectory_dir[:3] = goal_pose_o[:3] + 0.002 * np.random.randint(-10*np.ones(3), 10*np.ones(3)) - (self.box_position + self.box_error)
+            self.trajectory_dir[:3] = goal_pose_o[:3] - (self.box_position + self.box_error)
             self.trajectory_dir[2] = 0.
-            self.trajectory_dir[:3] /= np.linalg.norm(self.trajectory_dir[:3]) * scaling
+            if np.linalg.norm(self.trajectory_dir[:3]) > 0.025:
+                self.trajectory_dir[:3] /= np.linalg.norm(self.trajectory_dir[:3])
+            self.trajectory_dir[:3] *= (1/scaling)
         else:   # box dropped # go to box
             # It is assumed that self.curr_reset_pose is defined (for instance, saved during reset)
             target_picking = self.box_position + self.box_error
             target_picking[2] += 0.14 + self.box_size / 2
 
             # Compute the total horizontal displacement from the starting position to the target
-            horizontal_total = np.linalg.norm(target_picking[:2] - self.curr_reset_pose[:2])
+            horizontal_total = 0.1
             # Compute the horizontal progress made so far
-            horizontal_progress = np.linalg.norm(self.curr_pos[:2] - self.curr_reset_pose[:2])
+            horizontal_progress = np.linalg.norm(self.curr_pos[:2] - target_picking[:2])
             s = np.clip(horizontal_progress / horizontal_total, 0, 1) if horizontal_total > 0 else 0
 
             # Define a parabolic offset that is zero at s=0 and s=1 and peaks at s=0.5
@@ -108,7 +114,20 @@ class BoxPlacingCornerEnv(UR5Env):
         self.trajectory_dir[3:] = (
             R.from_rotvec(goal_pose_o[3:]) * R.from_rotvec(-self.box_orientation)
         ).as_rotvec()
+        
+    def update_last_box_pose(self):
+        self.last_box_pose = self.box_pose.copy()
 
+    def has_box_moved(self):
+        # Check if the box has moved significantly
+        position_diff = np.linalg.norm(self.box_pose[:3] - self.last_box_pose[:3])
+        rotation_diff = rot_vec_diff(self.box_pose[3:], self.last_box_pose[3:])
+        
+        # print(f"position_diff: {position_diff}, rotation_diff: {rotation_diff}")
+        
+        box_moved = position_diff > 0.01 \
+            or rotation_diff > 0.1
+        return box_moved
                 
     def step(self, action: np.ndarray) -> tuple:
         """standard gym step function."""
@@ -133,7 +152,7 @@ class BoxPlacingCornerEnv(UR5Env):
         # orientation
         next_pos[3:] = (
             R.from_mrp(action_filtered[3:6] * self.action_scale[1] / 4.) \
-            * R.from_rotvec(self.trajectory_dir[3:] / 10.) *  R.from_quat(next_pos[3:])
+            * R.from_rotvec(self.trajectory_dir[3:] / 50.) *  R.from_quat(next_pos[3:])
         ).as_quat()             # c * r  --> applies c after r
 
         gripper_action = action[6] * self.action_scale[2]
@@ -145,6 +164,10 @@ class BoxPlacingCornerEnv(UR5Env):
         self.curr_path_length += 1
 
         obs = self._get_obs(action)
+        
+        self.box_pose = np.concatenate([self.box_position, self.box_orientation])
+        
+        # print(f"box_pose: {self.box_pose}")
         
         truncated = self._is_truncated()
 

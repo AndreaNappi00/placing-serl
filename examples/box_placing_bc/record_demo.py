@@ -13,9 +13,11 @@ from colorama import Fore, Style
 from ur_env.envs.wrappers import SpacemouseIntervention, Quat2MrpWrapper, InterruptActionWrapper
 from serl_launcher.wrappers.serl_obs_wrappers import SerlObsWrapperNoImages, SerlObsWrapperTrajBox, ScaleObservationWrapper
 from serl_launcher.wrappers.chunking import ChunkingWrapper
+from serl_launcher.utils.launcher import make_wandb_logger
 
 from gymnasium.wrappers import TransformReward
 from ur_env.envs.relative_env import RelativeFrame, RelativeRewardCorner
+
 
 exit_program = threading.Event()
 
@@ -45,6 +47,12 @@ if __name__ == "__main__":
     # env = ChunkingWrapper(env, obs_horizon=1, act_exec_horizon=None)
 
     obs, _ = env.reset()
+    
+    wandb_logger = make_wandb_logger(
+        project="paper_experiments",
+        description="corner",
+        debug=True,
+    )
 
     transitions = []
     success_count = 0
@@ -69,12 +77,15 @@ if __name__ == "__main__":
         raise PermissionError(f"No permission to write to {file_dir}")
 
     try:
+        step = 0
         while success_count < success_needed:
             if exit_program.is_set():
                 raise KeyboardInterrupt  # stop program, but clean up before
 
             next_obs, rew, done, truncated, info = env.step(action=np.zeros((7,)))
             actions = info["intervene_action"]
+            
+            wandb_logger.log(info, step=step)
 
             transition = copy.deepcopy(
                 dict(
@@ -94,6 +105,8 @@ if __name__ == "__main__":
             forces_status = f"{Fore.GREEN if info.get('forces') else Fore.RED}{'True' if info.get('forces') else 'False'}{Style.RESET_ALL}"
             box_status = f"{Fore.GREEN if info.get('box_pose') else Fore.RED}{'True' if info.get('box_pose') else 'False'}{Style.RESET_ALL}"
             pbar.set_description(f"Forces: {forces_status}, Box: {box_status}")
+            
+            step += 1
 
             if done:
                 success_count += int(rew > 50)
