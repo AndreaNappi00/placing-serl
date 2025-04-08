@@ -23,8 +23,6 @@
 6. To evaluate on a policy, modify and execute ```run_evaluation.py``` with the specified checkpoint path and step. 
 
 ## EuroBox filling video
-<p>
-<video width="80%" controls>
-  <source src="./docs/videos/robot_filling_box.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
+![EuroBox Filling](./docs/images/robot_filling_box.gif)
+
+Video available for downloads [here](./docs/videos/robot_filling_box.mp4).
