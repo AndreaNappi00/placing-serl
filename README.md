@@ -1,5 +1,10 @@
 # Placing SERL
 
+## EuroBox filling video
+![EuroBox Filling](./docs/images/robot_filling_box.gif)
+
+Video available for downloads [here](./docs/videos/robot_filling_box.mp4).
+
 ## Contributions
 
 | Code Directory                                                                                             | Description                                |
@@ -21,8 +26,3 @@
 4. Record 20 demostrations using [record_demo.py](https://github.com/AndreaNappi00/placing-serl/blob/develop/examples/box_placing_sac_hil/record_demo.py) in the same folder.
 5. Execute ```run_learner.py``` and ```run_actor.py```to start the RL training. I suggest to let the learner start with an advantage of around 1000 steps.
 6. To evaluate on a policy, modify and execute ```run_evaluation.py``` with the specified checkpoint path and step. 
-
-## EuroBox filling video
-![EuroBox Filling](./docs/images/robot_filling_box.gif)
-
-Video available for downloads [here](./docs/videos/robot_filling_box.mp4).
